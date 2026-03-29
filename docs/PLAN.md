@@ -79,10 +79,10 @@ Statically build the Next.js frontend and serve it from FastAPI, so the Kanban b
 
 ### Tests
 
-- [x] Frontend unit tests still pass: `npm run test:unit` — 13/13 tests, 92.6% stmts / 90.12% branches
-- [x] Frontend E2E tests passing: 3/3 (page load, add card, drag card) against Docker port 8000
+- [x] Frontend unit tests pass (`npm run test:unit`); coverage thresholds in `vitest.config.ts` (app routes excluded from coverage, covered by E2E)
+- [x] Frontend E2E (Playwright): auth + Kanban flows against backend on port 8000 (see Part 7 for current spec scope)
 - [x] Backend integration test: `GET /` returns 200 and contains expected HTML content
-- [x] Manual smoke test: Docker build + `http://localhost:8000/` shows the full Kanban board
+- [x] Manual smoke test: Docker build + `http://localhost:8000/` shows the full Kanban app
 
 ### Success Criteria
 
@@ -112,8 +112,8 @@ Gate the Kanban board behind a login screen. Hardcoded credentials: `user` / `pa
 
 ### Tests
 
-- [x] Backend unit tests: 7 tests — valid/invalid login, me endpoint, logout invalidates session
-- [x] E2E tests (Playwright): 7/7 passing — redirect, wrong credentials, correct login, sign out, board loads/adds/moves
+- [x] Backend unit tests: login/me/logout, second-login reuses DB user/board (see `backend/tests/test_auth.py`)
+- [x] E2E tests (Playwright): auth flows plus board interactions; expanded in Part 7 for persistence (see `frontend/tests/kanban.spec.ts`)
 
 ### Success Criteria
 
@@ -154,7 +154,7 @@ Implement API routes for reading and modifying the Kanban board. Create the SQLi
 
 - [x] Add SQLite integration using the approved schema (Part 5):
   - Use `sqlite3` stdlib or a lightweight ORM (e.g., SQLModel or raw sqlite3)
-  - Database file path configurable via env var `DB_PATH` (default: `./data/kanban.db`)
+  - Database file path configurable via env var `DB_PATH` (default: `data/kanban.db` from cwd; Docker Compose: `DB_PATH=/app/data/kanban.db` + volume `./data:/app/data`)
   - Auto-create tables on startup if they do not exist
   - Seed the database with initial data for the authenticated user on first login
 - [x] API routes (all require authentication):
@@ -206,6 +206,7 @@ Replace the in-memory demo state in the frontend with real backend API calls.
 - [x] Remove `initialData` from `kanban.ts` (or keep for tests only)
 - [x] Auth token is sent with every request (from cookie or header)
 - [x] Handle 401 responses globally: redirect to `/login`
+- [x] Drag-and-drop reliability: dnd-kit uses namespaced ids (`col-*` droppables, `card-*` sortables) and `moveCard` accepts a `DragOver` target type so moves stay in sync with the API when column and card numeric ids collide (SQLite). See **Design decisions and implementation notes** below.
 
 ### Tests
 
@@ -224,6 +225,50 @@ Replace the in-memory demo state in the frontend with real backend API calls.
 - All Kanban actions (add, rename, delete, move) persist to the database
 - All E2E tests pass
 - All tests pass with >= 80% coverage
+
+---
+
+## Design decisions and implementation notes (Parts 2–7)
+
+This section records choices made during implementation that are not fully captured in the part checklists above. It should be kept in sync when behavior changes.
+
+### Backend structure
+
+- **SQLite**: `sqlite3` stdlib only (no ORM). `backend/database.py` — path, `init_schema`, `get_db` dependency, `ensure_user_board` (user row + board + five columns on first successful login), `reset_for_testing` for pytest.
+- **Routes**: `backend/kanban_api.py` registers `APIRouter` routes; `main.py` includes it under `/api`, runs `init_database()` in FastAPI **lifespan**, calls `ensure_user_board` inside `POST /api/auth/login` (same DB transaction as `get_db`).
+- **IDs**: Numeric primary keys in JSON; frontend maps to string ids in `BoardData`.
+
+### Frontend integration (Part 7)
+
+- **`src/lib/api.ts`**: All API `fetch` calls use `credentials: "include"`; non-OK **401** triggers `window.location.assign("/login")`.
+- **Auth pages**: `login/page.tsx` and `app/page.tsx` also use `credentials: "include"` for login, `/api/auth/me`, and logout.
+- **Initial board data**: Removed from `kanban.ts`; **`src/test/fixtures/board.ts`** supplies `testBoardData` for component tests.
+- **Column rename**: `KanbanColumn` keeps a local title draft; **`PUT /api/columns/{id}`** runs on **blur** (and Enter blurs), not on every keystroke.
+- **Optimistic UI**: Board updates immediately; on API failure, handlers call **`fetchBoard()`** again to resync.
+- **Static export**: `next.config.ts` uses `trailingSlash: true`; login URL in E2E uses `/login/`.
+
+### Drag and drop (dnd-kit) — critical fix after Part 7
+
+- **Problem**: SQLite assigns **independent** auto-increments to `columns.id` and `cards.id`, so a column and a card can share the same numeric id (e.g. both `"5"`). Using that value as both `useDroppable` and `useSortable` ids **collides** in `@dnd-kit`. Also, `moveCard` previously resolved “active column” with `isColumnId` before `cardIds.includes`, so a **card id equal to some column id** was mis-attributed to the wrong column; the move API then failed and **`reloadBoard()`** snapped the card back.
+- **Decision**:
+  - **`src/lib/dndIds.ts`**: Droppable ids `col-${columnId}`, sortable ids `card-${cardId}`; `SortableContext` **items** use the same `card-*` ids as each `useSortable`.
+  - **`moveCard`** in `kanban.ts` takes a **`DragOver`** discriminated union: `{ type: "column", columnId }` vs `{ type: "card", cardId }`, parsed from dnd ids in `KanbanBoard` via `dndOverToDragOver`. Source column is **only** `columns.find(c => c.cardIds.includes(activeCardId))`.
+
+### Testing
+
+- **Backend**: `backend/tests/conftest.py` sets a temp `DB_PATH`, session `init_database`, autouse reset (truncate tables + clear in-memory auth sessions) per test. Kanban + auth + health + static covered; **~35** tests at last count.
+- **Frontend unit**: `api.test.ts`, `dndIds.test.ts`, `kanban.test.ts`, `KanbanBoard.test.tsx`, etc. Vitest **coverage excludes `src/app/**`**; thresholds remain >= 80% on included files.
+- **Playwright** (`frontend/tests/kanban.spec.ts`):
+  - **`test.describe.serial("kanban app")`** — sequential execution against one persistent dev DB avoids parallel corruption.
+  - **`PLAYWRIGHT_BASE_URL`** in `playwright.config.ts` (default `http://localhost:8000`) for pointing at a local uvicorn on another port.
+  - **Unique card titles** (`Date.now()` suffix) so strict assertions do not match duplicate titles across runs.
+  - Column/card locators prefer **`[data-testid^="column-"]`** **nth**/first rather than assuming SQLite id `1` / `4`.
+  - Submit uses **`name: "Add card", exact: true`** to avoid matching “Add a card”.
+- **E2E prerequisite**: The browser bundle must match the repo. Use **`docker compose up --build`** after frontend changes, or `npm run build` and sync `frontend/out/` into `backend/static/` for local uvicorn (see `frontend/AGENTS.md`).
+
+### Parts 8–10
+
+Unchanged roadmap; not started. When implementing, extend this section with AI/OpenRouter and sidebar decisions as needed.
 
 ---
 
