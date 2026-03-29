@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { KanbanBoard } from "@/components/KanbanBoard";
 
 export default function Home() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [boardRefreshNonce, setBoardRefreshNonce] = useState<
+    number | undefined
+  >(undefined);
 
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include" })
@@ -29,5 +33,15 @@ export default function Home() {
   };
 
   if (!ready) return null;
-  return <KanbanBoard onLogout={handleLogout} />;
+  return (
+    <>
+      <KanbanBoard
+        boardRefreshNonce={boardRefreshNonce}
+        onLogout={handleLogout}
+      />
+      <AIChatSidebar
+        onBoardUpdate={() => setBoardRefreshNonce(Date.now())}
+      />
+    </>
+  );
 }

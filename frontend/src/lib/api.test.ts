@@ -5,6 +5,7 @@ import {
   deleteCard,
   fetchBoard,
   persistCardMove,
+  sendChat,
   updateColumn,
   type ApiBoard,
 } from "@/lib/api";
@@ -151,5 +152,32 @@ describe("api fetch helpers", () => {
         body: JSON.stringify({ column_id: 2, position: 0 }),
       })
     );
+  });
+
+  it("sendChat POSTs message and history", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ message: "Hi", board_updated: false }),
+    });
+    const hist = [{ role: "user" as const, content: "yo" }];
+    const out = await sendChat("next", hist);
+    expect(out).toEqual({ message: "Hi", board_updated: false });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/chat",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ message: "next", history: hist }),
+      })
+    );
+  });
+
+  it("sendChat throws with detail string on error", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: "no key" }),
+    });
+    await expect(sendChat("x", [])).rejects.toThrow("no key");
   });
 });

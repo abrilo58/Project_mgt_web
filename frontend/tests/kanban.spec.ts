@@ -144,4 +144,85 @@ test.describe.serial("kanban app", () => {
   ).toBeVisible();
   });
 
+  // --- AI chat (live OpenRouter; skip in CI without OPENROUTER_API_KEY) ---
+
+  test("AI sidebar: send message and see assistant reply", async ({ page }) => {
+    test.skip(!process.env.OPENROUTER_API_KEY, "OPENROUTER_API_KEY not set");
+    test.setTimeout(120_000);
+    await login(page);
+    await page.getByTestId("ai-chat-toggle").click();
+    await page
+      .getByTestId("ai-chat-input")
+      .fill("Reply with a single word only: ACK");
+    await page.getByTestId("ai-chat-send").click();
+    const assistant = page
+      .getByTestId("ai-chat-messages")
+      .getByTestId("ai-chat-msg-assistant")
+      .last();
+    await expect(assistant).toBeVisible({ timeout: 120_000 });
+    await expect(assistant).toContainText(/ACK/i);
+  });
+
+  test("AI sidebar: create card on board without reload", async ({ page }) => {
+    test.skip(!process.env.OPENROUTER_API_KEY, "OPENROUTER_API_KEY not set");
+    test.setTimeout(120_000);
+    await login(page);
+    const title = `AI E2E ${Date.now()}`;
+    const backlog = page.locator('[data-testid^="column-"]').first();
+    await page.getByTestId("ai-chat-toggle").click();
+    await page
+      .getByTestId("ai-chat-input")
+      .fill(
+        `Add exactly one card to the Backlog column with title "${title}" (use board_update.cards_to_create).`
+      );
+    await page.getByTestId("ai-chat-send").click();
+    await expect(backlog.getByText(title)).toBeVisible({ timeout: 120_000 });
+  });
+
+  test("AI sidebar: move card between columns without reload", async ({
+    page,
+  }) => {
+    test.skip(!process.env.OPENROUTER_API_KEY, "OPENROUTER_API_KEY not set");
+    test.setTimeout(120_000);
+    await login(page);
+    const title = `AI move ${Date.now()}`;
+    const backlog = page.locator('[data-testid^="column-"]').first();
+    const discovery = page.locator('[data-testid^="column-"]').nth(1);
+    await backlog.getByRole("button", { name: /add a card/i }).click();
+    await backlog.getByPlaceholder("Card title").fill(title);
+    await backlog.getByRole("button", { name: "Add card", exact: true }).click();
+    await expect(backlog.getByText(title)).toBeVisible();
+
+    await page.getByTestId("ai-chat-toggle").click();
+    await page
+      .getByTestId("ai-chat-input")
+      .fill(
+        `Move the card titled "${title}" from Backlog to Discovery using board_update.cards_to_move (position 0).`
+      );
+    await page.getByTestId("ai-chat-send").click();
+    await expect(discovery.getByText(title)).toBeVisible({ timeout: 120_000 });
+  });
+
+  test("AI sidebar: conversation shows multiple user messages", async ({
+    page,
+  }) => {
+    test.skip(!process.env.OPENROUTER_API_KEY, "OPENROUTER_API_KEY not set");
+    test.setTimeout(180_000);
+    await login(page);
+    await page.getByTestId("ai-chat-toggle").click();
+    await page.getByTestId("ai-chat-input").fill("Say hi in one word.");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(
+      page.getByTestId("ai-chat-messages").getByTestId("ai-chat-msg-assistant").last()
+    ).toBeVisible({ timeout: 120_000 });
+    await page.getByTestId("ai-chat-input").fill("Say bye in one word.");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(
+      page.getByTestId("ai-chat-messages").getByTestId("ai-chat-msg-user")
+    ).toHaveCount(2);
+    await expect(
+      page.getByTestId("ai-chat-messages").getByTestId("ai-chat-msg-assistant").last()
+    ).toBeVisible({ timeout: 120_000 });
+  });
+
 });

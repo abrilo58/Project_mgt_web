@@ -129,3 +129,39 @@ export async function persistCardMove(
     throw new Error(`Move card failed: ${res.status}`);
   }
 }
+
+export type ChatHistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type ChatResponse = {
+  message: string;
+  board_updated: boolean;
+};
+
+async function errorBodyMessage(res: Response): Promise<string> {
+  try {
+    const j = (await res.json()) as { detail?: unknown };
+    if (typeof j.detail === "string") {
+      return j.detail;
+    }
+  } catch {
+    /* ignore */
+  }
+  return `Request failed: ${res.status}`;
+}
+
+export async function sendChat(
+  message: string,
+  history: ChatHistoryMessage[]
+): Promise<ChatResponse> {
+  const res = await apiFetch("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, history }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorBodyMessage(res));
+  }
+  return res.json() as Promise<ChatResponse>;
+}

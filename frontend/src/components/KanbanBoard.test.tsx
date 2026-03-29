@@ -48,6 +48,13 @@ describe("KanbanBoard", () => {
     expect(fetchBoard).toHaveBeenCalled();
   });
 
+  it("refetches board when boardRefreshNonce changes", async () => {
+    const { rerender } = render(<KanbanBoard />);
+    await waitFor(() => expect(fetchBoard).toHaveBeenCalledTimes(1));
+    rerender(<KanbanBoard boardRefreshNonce={1} />);
+    await waitFor(() => expect(fetchBoard).toHaveBeenCalledTimes(2));
+  });
+
   it("shows load error and retry loads the board", async () => {
     vi.mocked(fetchBoard)
       .mockRejectedValueOnce(new Error("network down"))

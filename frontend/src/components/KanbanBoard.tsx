@@ -25,9 +25,14 @@ import { moveCard, type BoardData } from "@/lib/kanban";
 
 type KanbanBoardProps = {
   onLogout?: () => void;
+  /** When this value changes, the board is re-fetched from the API (e.g. after AI mutations). */
+  boardRefreshNonce?: number;
 };
 
-export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
+export const KanbanBoard = ({
+  onLogout,
+  boardRefreshNonce,
+}: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
@@ -61,6 +66,22 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (boardRefreshNonce === undefined) return;
+    let cancelled = false;
+    setLoadError(null);
+    reloadBoard().catch((err) => {
+      if (!cancelled) {
+        setLoadError(
+          err instanceof Error ? err.message : "Failed to load board"
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [boardRefreshNonce, reloadBoard]);
 
   const cardsById = useMemo(
     () => board?.cards ?? {},

@@ -20,11 +20,12 @@ Next.js App Router Kanban board backed by the FastAPI API (same origin in Docker
 frontend/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx             Auth gate; renders <KanbanBoard /> when /api/auth/me ok
+│   │   ├── page.tsx             Auth gate; <KanbanBoard /> + <AIChatSidebar /> when /api/auth/me ok
 │   │   ├── login/page.tsx       Login form (POST /api/auth/login)
 │   │   └── ...
 │   ├── components/
-│   │   ├── KanbanBoard.tsx      Fetches board; wires API to handlers; loading/error UI
+│   │   ├── KanbanBoard.tsx      Fetches board; optional `boardRefreshNonce` refetch; loading/error UI
+│   │   ├── AIChatSidebar.tsx    Toggle + `POST /api/chat`; calls `onBoardUpdate` when `board_updated`
 │   │   ├── KanbanColumn.tsx     Column title commits on blur (API rename)
 │   │   └── ...
 │   ├── lib/
@@ -37,7 +38,7 @@ frontend/
 
 ## API client (`src/lib/api.ts`)
 
-- `fetchBoard`, `updateColumn`, `createCard`, `deleteCard`, `persistCardMove`
+- `fetchBoard`, `updateColumn`, `createCard`, `deleteCard`, `persistCardMove`, `sendChat` (`POST /api/chat`)
 - `boardFromApi` maps numeric API ids to string ids for the Kanban model
 
 ## Running locally
@@ -57,6 +58,7 @@ Default `baseURL` is `http://localhost:8000` (Docker Compose). The served JS mus
 
 Optional: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8001` for a local server on another port.
 
-## Future
+## AI chat (Part 10)
 
-- **Part 10**: AI chat sidebar; refresh board when AI applies updates.
+- **`AIChatSidebar`**: `sendChat` with full `history` each turn; **`onBoardUpdate`** bumps `boardRefreshNonce` on the home page so **`KanbanBoard`** refetches.
+- **Playwright**: tests under `AI chat (OpenRouter)` skip unless **`OPENROUTER_API_KEY`** is set (live model).

@@ -279,9 +279,15 @@ This section records choices made during implementation that are not fully captu
 - **`POST /api/chat`**: Body `{"message", "history"?}`; loads board via `get_board_data`; applies `parsed.board_update` via `apply_ai_board_update`; **502** on invalid AI JSON, **503** if API key missing.
 - **`kanban_api`**: `get_board_data`, `*_data` helpers shared with REST; `apply_ai_board_update` orchestrates AI mutations.
 
+### Frontend AI endpoints (Parts 8–10)
+
+- **`POST /api/chat`** — **Primary app integration**: Kanban-aware assistant; request `{"message": string, "history"?: [{ "role": "user"|"assistant", "content": string }]}`; response `{"message": string, "board_updated": boolean}`. Use **`credentials: "include"`** (session cookie).
+- **`POST /api/chat/test`** — **Smoke / dev only**: fixed “what is 2+2?” prompt; response `{"reply": string, "model": string}`. Not used by the Kanban UI.
+- **Live OpenRouter check**: With `OPENROUTER_API_KEY` set, `pytest -m integration` can run `test_chat_test_route_real_openrouter` against **`openai/gpt-oss-120b`** (optional in CI).
+
 ### Parts 8–10
 
-Parts 8–9 decisions are recorded below. Part 10 not started. When implementing Part 10, extend this section with sidebar UI decisions as needed.
+Parts 8–9 decisions are recorded above. Part 10 decisions are under Part 10 below.
 
 ---
 
@@ -385,29 +391,36 @@ Extend the AI endpoint so it accepts the user's message plus conversation histor
 
 Add a sidebar to the frontend with a full chat interface. If the AI updates the board, the UI refreshes automatically.
 
+### Part 10 design decisions (implementation)
+
+- **`sendChat` in `src/lib/api.ts`**: `POST /api/chat` with `credentials: "include"`; surfaces **502/503** as thrown `Error` with `detail` text when present.
+- **Layout**: `page.tsx` wraps **`KanbanBoard`** + **`AIChatSidebar`**; **`boardRefreshNonce`** (`number | undefined`) passed to the board — when the nonce changes, the board **re-fetches** via existing `reloadBoard()` (avoids double-fetch on first paint).
+- **Sidebar**: Fixed right panel when open; primary toggle **“AI assistant”** in the board header; slide-in panel with navy title, purple **Send**, gray labels; messages as distinct bubbles (user vs assistant).
+- **E2E**: Playwright tests that hit the **real** OpenRouter stack are **`test.skip`** when **`OPENROUTER_API_KEY`** is unset (default in CI); run locally with the env var set for full AI flows.
+
 ### Substeps
 
-- [ ] Create `src/components/AIChatSidebar.tsx`:
+- [x] Create `src/components/AIChatSidebar.tsx`:
   - Toggle button to open/close sidebar
   - Chat message list (user messages + AI responses, distinguished visually)
   - Text input and submit button
   - Loading indicator while awaiting AI response
   - Apply project color scheme (purple submit button, navy headings, etc.)
-- [ ] Update `src/app/page.tsx`:
+- [x] Update `src/app/page.tsx`:
   - Render sidebar alongside `<KanbanBoard>`
   - Pass a `onBoardUpdate` callback to the sidebar
-- [ ] In `KanbanBoard.tsx`: expose a `refresh()` method or accept a `refreshTrigger` prop that re-fetches the board from the API
-- [ ] On AI response where `board_updated === true`: trigger board refresh automatically
-- [ ] Maintain conversation history in sidebar state for display and pass prior messages to backend on each call
+- [x] In `KanbanBoard.tsx`: expose a `refresh()` method or accept a `refreshTrigger` prop that re-fetches the board from the API
+- [x] On AI response where `board_updated === true`: trigger board refresh automatically
+- [x] Maintain conversation history in sidebar state for display and pass prior messages to backend on each call
 
 ### Tests
 
-- [ ] Component tests for `AIChatSidebar`:
+- [x] Component tests for `AIChatSidebar`:
   - Renders empty chat state
   - Submitting a message adds it to the conversation list
   - Loading state is shown while awaiting response
   - On `board_updated: true`, the `onBoardUpdate` callback is called
-- [ ] E2E tests (Playwright):
+- [x] E2E tests (Playwright):
   - Open sidebar, send a message, receive a response
   - Ask AI to create a card — card appears on the board without page reload
   - Ask AI to move a card — card moves to the correct column without page reload

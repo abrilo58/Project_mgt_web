@@ -8,6 +8,7 @@ def pytest_configure(config):
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     os.environ["DB_PATH"] = path
+    os.environ["SKIP_DEMO_CARDS"] = "1"
 
 
 @pytest.fixture(scope="session", autouse=True)

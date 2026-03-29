@@ -76,6 +76,67 @@ SEED_COLUMNS = [
     (4, "Done"),
 ]
 
+# (column title, position within column, card title, details) — for demos / AI summarization
+SAMPLE_CARDS: list[tuple[str, int, str, str]] = [
+    (
+        "Backlog",
+        0,
+        "Customer SSO (SAML)",
+        "Enterprise Q2 deal blocker. IdP metadata and SCIM scope due before sprint review.",
+    ),
+    (
+        "Backlog",
+        1,
+        "Mobile offline mode",
+        "Start with read-only cache; define conflict resolution before write path.",
+    ),
+    (
+        "Discovery",
+        0,
+        "Analytics pipeline rebuild",
+        "Spike: evaluate ClickHouse vs BigQuery for event retention and cost.",
+    ),
+    (
+        "In Progress",
+        0,
+        "Invoice PDF export",
+        "Legal requires VAT line items and locale-specific number formats.",
+    ),
+    (
+        "Review",
+        0,
+        "Dark mode polish",
+        "WCAG contrast pass on settings, modals, and Kanban chrome.",
+    ),
+    (
+        "Done",
+        0,
+        "Weekly email digest MVP",
+        "Shipped; monitor unsubscribe rate and spam folder placement.",
+    ),
+]
+
+
+def _seed_sample_cards(conn: sqlite3.Connection, board_id: int) -> None:
+    rows = conn.execute(
+        """
+        SELECT id, title FROM columns
+        WHERE board_id = ?
+        ORDER BY position, id
+        """,
+        (board_id,),
+    ).fetchall()
+    col_id_by_title = {r["title"]: r["id"] for r in rows}
+    for col_title, position, title, details in SAMPLE_CARDS:
+        col_id = col_id_by_title[col_title]
+        conn.execute(
+            """
+            INSERT INTO cards (column_id, title, details, position)
+            VALUES (?, ?, ?, ?)
+            """,
+            (col_id, title, details, position),
+        )
+
 
 def ensure_user_board(conn: sqlite3.Connection, username: str) -> None:
     row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
@@ -101,6 +162,9 @@ def ensure_user_board(conn: sqlite3.Connection, username: str) -> None:
             "INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)",
             (board_id, title, position),
         )
+
+    if os.environ.get("SKIP_DEMO_CARDS") != "1":
+        _seed_sample_cards(conn, board_id)
 
 
 def get_db() -> Generator[sqlite3.Connection, None, None]:
