@@ -177,3 +177,31 @@ def test_chat_502_on_invalid_ai_json():
     ):
         res = client.post("/api/chat", json={"message": "x"})
     assert res.status_code == 502
+
+
+def test_chat_502_when_ai_uses_invalid_card_id():
+    client = make_client()
+    login(client)
+    # AI hallucinates a card_id that does not exist — should return 502, not 404
+    bu = BoardUpdate(cards_to_delete=[CardToDelete(card_id=99999)])
+    with patch(
+        "main.ai_module.chat_kanban",
+        return_value=AIResponse(message="Done.", board_update=bu),
+    ):
+        res = client.post("/api/chat", json={"message": "delete card 99999"})
+    assert res.status_code == 502
+    assert "AI board update failed" in res.json()["detail"]
+
+
+def test_chat_502_when_ai_uses_invalid_column_id():
+    client = make_client()
+    login(client)
+    # AI hallucinates a column_id that does not exist — should return 502, not 404
+    bu = BoardUpdate(cards_to_create=[CardToCreate(column_id=99999, title="Ghost", details="")])
+    with patch(
+        "main.ai_module.chat_kanban",
+        return_value=AIResponse(message="Created.", board_update=bu),
+    ):
+        res = client.post("/api/chat", json={"message": "add a card to column 99999"})
+    assert res.status_code == 502
+    assert "AI board update failed" in res.json()["detail"]

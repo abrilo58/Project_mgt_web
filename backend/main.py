@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -50,7 +51,8 @@ def login(
         raise HTTPException(status_code=401, detail="Invalid credentials")
     ensure_user_board(conn, credentials.username)
     token = create_session(credentials.username)
-    response.set_cookie("session_token", token, httponly=True, samesite="lax")
+    secure = os.environ.get("ENV") == "production"
+    response.set_cookie("session_token", token, httponly=True, samesite="lax", secure=secure)
     return {"ok": True}
 
 

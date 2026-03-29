@@ -376,35 +376,38 @@ def apply_ai_board_update(conn: sqlite3.Connection, username: str, bu: BoardUpda
     if bu is None:
         return False
     changed = False
-    for d in bu.cards_to_delete:
-        delete_card_data(conn, username, d.card_id)
-        changed = True
-    for c in bu.cards_to_create:
-        create_card_data(
-            conn,
-            username,
-            CreateCardBody(
-                column_id=c.column_id,
-                title=c.title,
-                details=c.details or "",
-                position=c.position,
-            ),
-        )
-        changed = True
-    for u in bu.cards_to_update:
-        update_card_data(
-            conn,
-            username,
-            u.card_id,
-            UpdateCardBody(
-                title=u.title,
-                details=u.details,
-                column_id=u.column_id,
-                position=u.position,
-            ),
-        )
-        changed = True
-    for m in bu.cards_to_move:
-        move_card_data(conn, username, m.card_id, MoveCardBody(column_id=m.column_id, position=m.position))
-        changed = True
+    try:
+        for d in bu.cards_to_delete:
+            delete_card_data(conn, username, d.card_id)
+            changed = True
+        for c in bu.cards_to_create:
+            create_card_data(
+                conn,
+                username,
+                CreateCardBody(
+                    column_id=c.column_id,
+                    title=c.title,
+                    details=c.details or "",
+                    position=c.position,
+                ),
+            )
+            changed = True
+        for u in bu.cards_to_update:
+            update_card_data(
+                conn,
+                username,
+                u.card_id,
+                UpdateCardBody(
+                    title=u.title,
+                    details=u.details,
+                    column_id=u.column_id,
+                    position=u.position,
+                ),
+            )
+            changed = True
+        for m in bu.cards_to_move:
+            move_card_data(conn, username, m.card_id, MoveCardBody(column_id=m.column_id, position=m.position))
+            changed = True
+    except HTTPException as e:
+        raise HTTPException(status_code=502, detail=f"AI board update failed: {e.detail}") from e
     return changed
