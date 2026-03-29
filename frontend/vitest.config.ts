@@ -10,6 +10,19 @@ export default defineConfig({
     globals: true,
     coverage: {
       reporter: ["text", "html"],
+      exclude: [
+        "*.config.*",
+        "src/app/layout.tsx",
+        "src/app/page.tsx",
+        "src/test/**",
+        "tests/**",
+      ],
+      thresholds: {
+        lines: 80,
+        branches: 80,
+        functions: 80,
+        statements: 80,
+      },
     },
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["node_modules", "tests"],

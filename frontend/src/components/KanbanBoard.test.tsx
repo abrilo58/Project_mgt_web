@@ -19,6 +19,17 @@ describe("KanbanBoard", () => {
     expect(input).toHaveValue("New Name");
   });
 
+  it("shows empty column placeholder when all cards are deleted", async () => {
+    render(<KanbanBoard />);
+    // Discovery column starts with 1 card ("Prototype analytics view")
+    const discoveryColumn = screen.getAllByTestId(/column-/i)[1];
+    const deleteButton = within(discoveryColumn).getByRole("button", {
+      name: /delete prototype analytics view/i,
+    });
+    await userEvent.click(deleteButton);
+    expect(within(discoveryColumn).getByText(/drop a card here/i)).toBeInTheDocument();
+  });
+
   it("adds and removes a card", async () => {
     render(<KanbanBoard />);
     const column = getFirstColumn();
