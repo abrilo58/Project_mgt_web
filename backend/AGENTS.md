@@ -2,7 +2,7 @@
 
 ## Overview
 
-Python FastAPI backend. Serves the statically built Next.js frontend at `/` and exposes API routes under `/api/`. Runs in Docker via `uv`.
+Python FastAPI backend. Serves the statically built Next.js frontend at `/` and exposes API routes under `/api/`. SQLite stores Kanban data per user. Runs in Docker via `uv`.
 
 ## Stack
 
@@ -10,34 +10,58 @@ Python FastAPI backend. Serves the statically built Next.js frontend at `/` and 
 - **FastAPI >= 0.115** — web framework
 - **Uvicorn** — ASGI server
 - **uv** — package manager (used inside Docker and locally)
+- **sqlite3** (stdlib) — persistence; schema in `docs/DATABASE.md`
 
 ## Directory Structure
 
 ```
 backend/
-├── main.py              Entry point; FastAPI app; mounts static files
-├── pyproject.toml       Project metadata and dependencies (uv-managed)
-├── .python-version      Pins Python to 3.12
-├── static/              Static files served at /
-│   └── index.html       Placeholder (replaced by Next.js build in Part 3+)
+├── main.py           FastAPI app, lifespan (init DB), auth routes, static mount
+├── auth.py           Session cookie auth (in-memory tokens)
+├── database.py       DB path, schema init, `get_db` dependency, seed on login
+├── kanban_api.py     Authenticated board / column / card routes (`APIRouter`)
+├── pyproject.toml
+├── .python-version
+├── static/           Next.js static export (build output)
 └── tests/
-    ├── __init__.py
-    ├── test_health.py   Tests for GET /api/health
-    └── test_static.py   Tests for static file serving at GET /
+    ├── conftest.py   Test DB path, schema init, per-test reset + session clear
+    ├── test_health.py
+    ├── test_static.py
+    ├── test_auth.py
+    └── test_kanban.py
 ```
+
+## Configuration
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `DB_PATH` | `./data/kanban.db` (resolved from cwd) | SQLite file path |
+
+Tables are created on startup if missing. On each successful login, `ensure_user_board` creates the user row (if needed), then a board named "Kanban Studio" with five columns if the user has no board yet.
 
 ## API Routes
 
 | Method | Path | Description | Auth required |
 |--------|------|-------------|---------------|
-| GET | `/api/health` | Returns `{"status": "ok"}` | No |
-| GET | `/` | Serves `static/index.html` | No |
+| GET | `/api/health` | `{"status": "ok"}` | No |
+| POST | `/api/auth/login` | Body `{username, password}`; sets httpOnly `session_token` cookie | No |
+| POST | `/api/auth/logout` | Clears session | No |
+| GET | `/api/auth/me` | `{"username": ...}` | Yes |
+| GET | `/api/board` | Board id, name, columns (with nested cards, ordered) | Yes |
+| PUT | `/api/columns/{column_id}` | Body `{"title"}`; rename column | Yes |
+| POST | `/api/cards` | Body `column_id`, `title`, optional `details`, optional `position` | Yes |
+| PUT | `/api/cards/{card_id}` | Optional `title`, `details`, `column_id`, `position` | Yes |
+| DELETE | `/api/cards/{card_id}` | Remove card | Yes |
+| PUT | `/api/cards/{card_id}/move` | Body `column_id`, `position` (0-based) | Yes |
+| GET | `/` | Static site | No |
+
+Unauthenticated access to protected routes returns **401**.
 
 ## Running Locally (without Docker)
 
 ```bash
 cd backend
-uv sync --extra dev   # installs all deps including test deps
+uv sync --extra dev
 uv run uvicorn main:app --reload --port 8000
 ```
 
@@ -51,21 +75,9 @@ uv run pytest --cov --cov-report=term-missing
 
 ## Docker
 
-The app is built and run via Docker Compose from the project root:
-
-```bash
-# From project root
-docker compose up --build
-```
-
-The `Dockerfile` (project root):
-1. Copies `backend/pyproject.toml` and runs `uv sync --no-dev`
-2. Copies all of `backend/` into `/app`
-3. Starts uvicorn on port 8000
+From project root: `docker compose up --build`. Compose sets `DB_PATH=/app/data/kanban.db` and mounts `./data` to `/app/data` so the database survives container restarts.
 
 ## Notes for Future Parts
 
-- **Part 3**: Replace `backend/static/index.html` with the Next.js static export (`frontend/out/`). Update the Dockerfile to build the frontend first.
-- **Part 4**: Add `POST /api/auth/login` and `POST /api/auth/logout` routes; add auth middleware.
-- **Part 6**: Add `GET /api/board` and CRUD routes for columns and cards; add SQLite database.
-- **Part 8**: Add `ai.py` and `POST /api/chat` route for OpenRouter AI calls.
+- **Part 7**: Frontend will call these routes instead of in-memory state.
+- **Part 8**: Add `ai.py` and `POST /api/chat` (OpenRouter).

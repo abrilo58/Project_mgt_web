@@ -1,3 +1,5 @@
+import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
@@ -11,8 +13,17 @@ from auth import (
     delete_session,
     get_current_user,
 )
+from database import ensure_user_board, get_db, init_database
+from kanban_api import router as kanban_router
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_database()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class LoginRequest(BaseModel):
@@ -26,9 +37,14 @@ def health():
 
 
 @app.post("/api/auth/login")
-def login(credentials: LoginRequest, response: Response):
+def login(
+    credentials: LoginRequest,
+    response: Response,
+    conn: sqlite3.Connection = Depends(get_db),
+):
     if credentials.username != HARDCODED_USERNAME or credentials.password != HARDCODED_PASSWORD:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    ensure_user_board(conn, credentials.username)
     token = create_session(credentials.username)
     response.set_cookie("session_token", token, httponly=True, samesite="lax")
     return {"ok": True}
@@ -46,6 +62,8 @@ def logout(response: Response, session_token: str | None = Cookie(default=None))
     response.delete_cookie("session_token")
     return {"ok": True}
 
+
+app.include_router(kanban_router, prefix="/api")
 
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

@@ -152,23 +152,23 @@ Implement API routes for reading and modifying the Kanban board. Create the SQLi
 
 ### Substeps
 
-- [ ] Add SQLite integration using the approved schema (Part 5):
+- [x] Add SQLite integration using the approved schema (Part 5):
   - Use `sqlite3` stdlib or a lightweight ORM (e.g., SQLModel or raw sqlite3)
   - Database file path configurable via env var `DB_PATH` (default: `./data/kanban.db`)
   - Auto-create tables on startup if they do not exist
   - Seed the database with initial data for the authenticated user on first login
-- [ ] API routes (all require authentication):
+- [x] API routes (all require authentication):
   - `GET /api/board` — returns the current user's board (columns + cards in order)
   - `PUT /api/columns/{column_id}` — rename a column
   - `POST /api/cards` — create a new card in a column
   - `PUT /api/cards/{card_id}` — update a card (title, details, column, position)
   - `DELETE /api/cards/{card_id}` — delete a card
   - `PUT /api/cards/{card_id}/move` — move card to a different column and/or position
-- [ ] Update `backend/AGENTS.md` with route documentation
+- [x] Update `backend/AGENTS.md` with route documentation
 
 ### Tests
 
-- [ ] Unit tests for each route using FastAPI `TestClient` with an in-memory SQLite DB:
+- [x] Unit tests for each route using FastAPI `TestClient` with an in-memory SQLite DB:
   - `GET /api/board` returns correct structure
   - `PUT /api/columns/{id}` renames column; returns updated column
   - `POST /api/cards` creates card; appears in subsequent `GET /api/board`
@@ -176,7 +176,7 @@ Implement API routes for reading and modifying the Kanban board. Create the SQLi
   - `DELETE /api/cards/{id}` removes card from board
   - `PUT /api/cards/{id}/move` moves card; correct position in target column
   - Unauthenticated requests to all routes return 401
-- [ ] Integration tests: multi-step flows (create card, move it, rename column, delete card) against test DB
+- [x] Integration tests: multi-step flows (create card, move it, rename column, delete card) against test DB
 
 ### Success Criteria
 

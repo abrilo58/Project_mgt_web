@@ -1,15 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
 
-import auth
 from main import app
-
-
-@pytest.fixture(autouse=True)
-def clear_sessions():
-    auth.sessions.clear()
-    yield
-    auth.sessions.clear()
 
 
 def make_client() -> TestClient:
@@ -28,6 +19,17 @@ def test_login_valid_credentials():
     assert res.status_code == 200
     assert res.json() == {"ok": True}
     assert "session_token" in client.cookies
+
+
+def test_second_login_reuses_user_and_board():
+    client = make_client()
+    client.post("/api/auth/login", json={"username": "user", "password": "password"})
+    client.post("/api/auth/logout")
+    res = client.post("/api/auth/login", json={"username": "user", "password": "password"})
+    assert res.status_code == 200
+    board = client.get("/api/board").json()
+    assert board["name"] == "Kanban Studio"
+    assert len(board["columns"]) == 5
 
 
 def test_login_wrong_password():
