@@ -131,26 +131,18 @@ Design the SQLite schema for the Kanban board and get sign-off before implementi
 
 ### Substeps
 
-- [ ] Propose a database schema covering:
-  - `users` table (id, username, hashed_password)
+- [x] Propose a database schema covering:
+  - `users` table (id, username — no password, hardcoded in app logic)
   - `boards` table (id, user_id, name)
   - `columns` table (id, board_id, title, position)
   - `cards` table (id, column_id, title, details, position)
-- [ ] Save schema as `docs/DATABASE.md` with:
-  - Table definitions (columns, types, constraints)
-  - Relationships and foreign keys
-  - Indexing strategy
-  - Notes on ordering (position field approach)
-- [ ] User reviews and approves the schema
-
-### Tests
-
-- [ ] No implementation tests yet — this part is design only
+- [x] Save schema as `docs/DATABASE.md`
+- [x] User reviewed and approved the schema
 
 ### Success Criteria
 
-- `docs/DATABASE.md` documents the full schema
-- User has explicitly approved the schema before Part 6 begins
+- [x] `docs/DATABASE.md` documents the full schema
+- [x] User approved schema before Part 6
 
 ---
 
