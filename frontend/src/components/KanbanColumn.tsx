@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
+import { dndColumnId, dndCardId } from "@/lib/dndIds";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
@@ -21,7 +22,7 @@ export const KanbanColumn = ({
   onAddCard,
   onDeleteCard,
 }: KanbanColumnProps) => {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { setNodeRef, isOver } = useDroppable({ id: dndColumnId(column.id) });
   const [titleDraft, setTitleDraft] = useState(column.title);
 
   useEffect(() => {
@@ -71,7 +72,10 @@ export const KanbanColumn = ({
         </div>
       </div>
       <div className="mt-4 flex flex-1 flex-col gap-3">
-        <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
+        <SortableContext
+          items={column.cardIds.map((id) => dndCardId(id))}
+          strategy={verticalListSortingStrategy}
+        >
           {cards.map((card) => (
             <KanbanCard
               key={card.id}

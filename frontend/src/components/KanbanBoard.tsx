@@ -20,6 +20,7 @@ import {
   persistCardMove,
   updateColumn,
 } from "@/lib/api";
+import { dndActiveToCardId, dndOverToDragOver } from "@/lib/dndIds";
 import { moveCard, type BoardData } from "@/lib/kanban";
 
 type KanbanBoardProps = {
@@ -67,7 +68,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveCardId(event.active.id as string);
+    setActiveCardId(dndActiveToCardId(String(event.active.id)));
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -78,10 +79,11 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
       return;
     }
 
-    const activeId = active.id as string;
+    const activeId = dndActiveToCardId(String(active.id));
+    const overSpec = dndOverToDragOver(String(over.id));
     const nextBoard: BoardData = {
       ...board,
-      columns: moveCard(board.columns, activeId, over.id as string),
+      columns: moveCard(board.columns, activeId, overSpec),
     };
     const col = nextBoard.columns.find((c) => c.cardIds.includes(activeId));
     if (!col) {
