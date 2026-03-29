@@ -266,9 +266,14 @@ This section records choices made during implementation that are not fully captu
   - Submit uses **`name: "Add card", exact: true`** to avoid matching “Add a card”.
 - **E2E prerequisite**: The browser bundle must match the repo. Use **`docker compose up --build`** after frontend changes, or `npm run build` and sync `frontend/out/` into `backend/static/` for local uvicorn (see `frontend/AGENTS.md`).
 
+### AI / OpenRouter (Part 8)
+
+- **`backend/ai.py`**: `OPENROUTER_BASE_URL`, `DEFAULT_MODEL` (`openai/gpt-oss-120b`), `complete_chat(messages, ...)`, `ask_what_is_two_plus_two()`. Optional `client` / `api_key` args for tests.
+- **`POST /api/chat/test`**: Authenticated; calls `ask_what_is_two_plus_two()`; JSON `{"reply", "model"}`; **503** if `OPENROUTER_API_KEY` missing/empty.
+
 ### Parts 8–10
 
-Unchanged roadmap; not started. When implementing, extend this section with AI/OpenRouter and sidebar decisions as needed.
+Part 8 decisions are recorded below. Parts 9–10 not started. When implementing, extend this section with structured output and sidebar decisions as needed.
 
 ---
 
@@ -276,18 +281,27 @@ Unchanged roadmap; not started. When implementing, extend this section with AI/O
 
 Connect the backend to OpenRouter and verify a simple AI call works.
 
+### Part 8 design decisions (implementation)
+
+- **`POST /api/chat/test` requires auth** (session cookie), consistent with other `/api` routes except health and auth.
+- **Response JSON** is `{"reply": "<assistant text>", "model": "<model id>"}` rather than the full provider payload, for a stable contract and simpler clients.
+- **`docker-compose.yml` already uses `env_file: .env`**, so `OPENROUTER_API_KEY` is available in the container when present in project `.env`; no compose change required.
+- **OpenRouter client**: base URL `https://openrouter.ai/api/v1`, `Authorization: Bearer <OPENROUTER_API_KEY>` via the official `openai` Python SDK (`OpenAI` with `base_url`).
+- **Missing key**: route returns **503** with a clear message; `ai.complete_chat` raises `ValueError` if neither key nor injected client is provided.
+- **Integration test**: `pytest.mark.integration`; skips when `OPENROUTER_API_KEY` is unset so CI stays green without secrets.
+
 ### Substeps
 
-- [ ] Add `openai` Python package as a dependency (OpenRouter is OpenAI-compatible)
-- [ ] Load `OPENROUTER_API_KEY` from environment (already in `.env`)
-- [ ] Create `backend/ai.py` — thin wrapper for calling OpenRouter with model `openai/gpt-oss-120b`
-- [ ] Add `POST /api/chat/test` route — sends a hardcoded "what is 2+2?" message to the AI and returns the raw response (dev/testing only)
-- [ ] Verify the API key and model work end-to-end
+- [x] Add `openai` Python package as a dependency (OpenRouter is OpenAI-compatible)
+- [x] Load `OPENROUTER_API_KEY` from environment (already in `.env`)
+- [x] Create `backend/ai.py` — thin wrapper for calling OpenRouter with model `openai/gpt-oss-120b`
+- [x] Add `POST /api/chat/test` route — sends a hardcoded "what is 2+2?" message to the AI and returns the raw response (dev/testing only)
+- [x] Verify the API key and model work end-to-end
 
 ### Tests
 
-- [ ] Unit test `ai.py` with a mocked HTTP client: correct model, correct API base URL, key passed in header
-- [ ] Integration test `POST /api/chat/test` with the real OpenRouter API (can be skipped in CI if no key available; mark with a skip marker)
+- [x] Unit test `ai.py` with a mocked HTTP client: correct model, correct API base URL, key passed in header
+- [x] Integration test `POST /api/chat/test` with the real OpenRouter API (can be skipped in CI if no key available; mark with a skip marker)
 
 ### Success Criteria
 

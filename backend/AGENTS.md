@@ -16,7 +16,8 @@ Python FastAPI backend. Serves the statically built Next.js frontend at `/` and 
 
 ```
 backend/
-├── main.py           FastAPI app, lifespan (init DB), auth routes, static mount
+├── main.py           FastAPI app, lifespan (init DB), auth + chat test routes, static mount
+├── ai.py             OpenRouter client wrapper (`openai` SDK, OpenAI-compatible API)
 ├── auth.py           Session cookie auth (in-memory tokens)
 ├── database.py       DB path, schema init, `get_db` dependency, seed on login
 ├── kanban_api.py     Authenticated board / column / card routes (`APIRouter`)
@@ -28,6 +29,7 @@ backend/
     ├── test_health.py
     ├── test_static.py
     ├── test_auth.py
+    ├── test_ai.py
     └── test_kanban.py
 ```
 
@@ -36,6 +38,7 @@ backend/
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `DB_PATH` | `./data/kanban.db` (resolved from cwd) | SQLite file path |
+| `OPENROUTER_API_KEY` | (none) | Required for `POST /api/chat/test` to call OpenRouter; optional in CI (tests mock or skip) |
 
 Tables are created on startup if missing. On each successful login, `ensure_user_board` creates the user row (if needed), then a board named "Kanban Studio" with five columns if the user has no board yet.
 
@@ -53,6 +56,7 @@ Tables are created on startup if missing. On each successful login, `ensure_user
 | PUT | `/api/cards/{card_id}` | Optional `title`, `details`, `column_id`, `position` | Yes |
 | DELETE | `/api/cards/{card_id}` | Remove card | Yes |
 | PUT | `/api/cards/{card_id}/move` | Body `column_id`, `position` (0-based) | Yes |
+| POST | `/api/chat/test` | Sends fixed prompt "what is 2+2?" to OpenRouter; returns `{"reply", "model"}` | Yes |
 | GET | `/` | Static site | No |
 
 Unauthenticated access to protected routes returns **401**.
@@ -79,5 +83,6 @@ From project root: `docker compose up --build`. Compose sets `DB_PATH=/app/data/
 
 ## Notes for Future Parts
 
-- **Part 7**: Frontend will call these routes instead of in-memory state.
-- **Part 8**: Add `ai.py` and `POST /api/chat` (OpenRouter).
+- **Part 7**: Frontend calls these routes instead of in-memory state (done).
+- **Part 8**: `ai.py` and `POST /api/chat/test` (OpenRouter smoke test) are done.
+- **Part 9+**: Full `POST /api/chat` with board context and structured outputs.

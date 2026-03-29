@@ -6,6 +6,7 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import ai as ai_module
 from auth import (
     HARDCODED_PASSWORD,
     HARDCODED_USERNAME,
@@ -61,6 +62,18 @@ def logout(response: Response, session_token: str | None = Cookie(default=None))
         delete_session(session_token)
     response.delete_cookie("session_token")
     return {"ok": True}
+
+
+@app.post("/api/chat/test")
+def chat_test(username: str = Depends(get_current_user)):
+    try:
+        reply = ai_module.ask_what_is_two_plus_two()
+    except ValueError:
+        raise HTTPException(
+            status_code=503,
+            detail="AI is not configured (set OPENROUTER_API_KEY)",
+        ) from None
+    return {"reply": reply, "model": ai_module.DEFAULT_MODEL}
 
 
 app.include_router(kanban_router, prefix="/api")
