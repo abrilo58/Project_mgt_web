@@ -194,8 +194,8 @@ Replace the in-memory demo state in the frontend with real backend API calls.
 
 ### Substeps
 
-- [ ] Create `src/lib/api.ts` — typed fetch wrapper for all API routes
-- [ ] Update `KanbanBoard.tsx`:
+- [x] Create `src/lib/api.ts` — typed fetch wrapper for all API routes
+- [x] Update `KanbanBoard.tsx`:
   - On mount: fetch board state from `GET /api/board`
   - On rename column: call `PUT /api/columns/{id}`
   - On add card: call `POST /api/cards`
@@ -203,20 +203,20 @@ Replace the in-memory demo state in the frontend with real backend API calls.
   - On drag end (move card): call `PUT /api/cards/{id}/move`
   - Show loading state while initial fetch is in flight
   - Show error state if fetch fails
-- [ ] Remove `initialData` from `kanban.ts` (or keep for tests only)
-- [ ] Auth token is sent with every request (from cookie or header)
-- [ ] Handle 401 responses globally: redirect to `/login`
+- [x] Remove `initialData` from `kanban.ts` (or keep for tests only)
+- [x] Auth token is sent with every request (from cookie or header)
+- [x] Handle 401 responses globally: redirect to `/login`
 
 ### Tests
 
-- [ ] Frontend unit tests: mock `api.ts` and verify each handler calls the correct endpoint
-- [ ] Frontend component tests: board renders correctly from mocked API response
-- [ ] E2E tests (Playwright):
+- [x] Frontend unit tests: mock `api.ts` and verify each handler calls the correct endpoint
+- [x] Frontend component tests: board renders correctly from mocked API response
+- [x] E2E tests (Playwright):
   - Full flow: login → board loads → add card → card persists on reload
   - Rename column persists on reload
   - Delete card persists on reload
   - Drag card to new column persists on reload
-- [ ] Backend integration tests remain green
+- [x] Backend integration tests remain green
 
 ### Success Criteria
 

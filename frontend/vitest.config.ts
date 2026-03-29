@@ -12,8 +12,7 @@ export default defineConfig({
       reporter: ["text", "html"],
       exclude: [
         "*.config.*",
-        "src/app/layout.tsx",
-        "src/app/page.tsx",
+        "src/app/**",
         "src/test/**",
         "tests/**",
       ],

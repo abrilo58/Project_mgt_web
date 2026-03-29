@@ -9,7 +9,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { credentials: "include" })
       .then((res) => {
         if (!res.ok) {
           router.replace("/login");
@@ -21,7 +21,10 @@ export default function Home() {
   }, [router]);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
     router.replace("/login");
   };
 
