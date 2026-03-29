@@ -1,5 +1,8 @@
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
+from ai_types import AIResponse
 from main import app
 
 
@@ -76,3 +79,21 @@ def test_logout_clears_cookie():
     res = client.post("/api/auth/logout")
     assert res.status_code == 200
     assert "session_token" not in client.cookies
+
+
+def test_logout_clears_server_chat_history():
+    client = make_client()
+    login(client)
+    with patch("main.ai_module.chat_kanban", return_value=AIResponse(message="a", board_update=None)):
+        client.post("/api/chat", json={"message": "hi"})
+    client.post("/api/auth/logout")
+    login(client)
+    captured: list[list] = []
+
+    def fake(user_message, conversation_history, board_state, **kwargs):
+        captured.append(list(conversation_history))
+        return AIResponse(message="b", board_update=None)
+
+    with patch("main.ai_module.chat_kanban", side_effect=fake):
+        client.post("/api/chat", json={"message": "again"})
+    assert captured[0] == []

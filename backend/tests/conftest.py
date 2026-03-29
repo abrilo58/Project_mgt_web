@@ -20,8 +20,10 @@ def _init_db_once():
 @pytest.fixture(autouse=True)
 def reset_db_and_sessions():
     import auth
+    import chat_store
     from database import connect, reset_for_testing
 
+    chat_store.clear_all()
     auth.sessions.clear()
     conn = connect()
     reset_for_testing(conn)

@@ -23,3 +23,9 @@ def get_current_user(session_token: str | None = Cookie(default=None)) -> str:
     if not session_token or session_token not in sessions:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return sessions[session_token]
+
+
+def get_session_token(session_token: str | None = Cookie(default=None)) -> str:
+    if not session_token or session_token not in sessions:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return session_token

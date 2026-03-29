@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
+    "openai>=1.60.0",
     "uvicorn[standard]>=0.30.0",
 ]
 
@@ -17,6 +18,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: calls external APIs (skipped when credentials unset)",
+]
 
 [tool.coverage.run]
 source = ["."]
