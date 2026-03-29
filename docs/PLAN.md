@@ -271,9 +271,17 @@ This section records choices made during implementation that are not fully captu
 - **`backend/ai.py`**: `OPENROUTER_BASE_URL`, `DEFAULT_MODEL` (`openai/gpt-oss-120b`), `complete_chat(messages, ...)`, `ask_what_is_two_plus_two()`. Optional `client` / `api_key` args for tests.
 - **`POST /api/chat/test`**: Authenticated; calls `ask_what_is_two_plus_two()`; JSON `{"reply", "model"}`; **503** if `OPENROUTER_API_KEY` missing/empty.
 
+### AI / Kanban chat (Part 9)
+
+- **`backend/ai_types.py`**: `ChatRequest`, `ChatHistoryMessage`, `AIResponse`, `BoardUpdate`, card action models.
+- **`backend/chat_store.py`**: In-memory transcript per `session_token`; cleared on logout.
+- **`ai.chat_kanban(user_message, conversation_history, board_state, ...)`** → `AIResponse`; system message embeds board JSON; `json_object` response format.
+- **`POST /api/chat`**: Body `{"message", "history"?}`; loads board via `get_board_data`; applies `parsed.board_update` via `apply_ai_board_update`; **502** on invalid AI JSON, **503** if API key missing.
+- **`kanban_api`**: `get_board_data`, `*_data` helpers shared with REST; `apply_ai_board_update` orchestrates AI mutations.
+
 ### Parts 8–10
 
-Part 8 decisions are recorded below. Parts 9–10 not started. When implementing, extend this section with structured output and sidebar decisions as needed.
+Parts 8–9 decisions are recorded below. Part 10 not started. When implementing Part 10, extend this section with sidebar UI decisions as needed.
 
 ---
 
@@ -315,9 +323,18 @@ Connect the backend to OpenRouter and verify a simple AI call works.
 
 Extend the AI endpoint so it accepts the user's message plus conversation history, always includes the current Kanban board as context, and responds with structured output that may optionally update the board.
 
+### Part 9 design decisions (implementation)
+
+- **Schema** lives in `backend/ai_types.py` as Pydantic models (`AIResponse`, `BoardUpdate`, `CardToCreate`, etc.).
+- **Structured output**: OpenRouter via `chat.completions.create` with `response_format: { "type": "json_object" }`, then `AIResponse.model_validate_json` (broad provider support vs strict `json_schema` / `parse`).
+- **`POST /api/chat`**: Authenticated; body `ChatRequest` with `message` and optional `history` (`null`/`omitted` uses server-side store for that session token).
+- **Board mutations**: `kanban_api.apply_ai_board_update` reuses `create_card_data`, `update_card_data`, `delete_card_data`, `move_card_data` in order **delete, create, update, move** (same semantics as REST routes).
+- **History**: `chat_store.CHAT_HISTORY` keyed by `session_token`; cleared on **logout** alongside session invalidation.
+- **`board_updated`**: `true` only if at least one mutation ran (empty `board_update` object or all-empty arrays yields `false`).
+
 ### Substeps
 
-- [ ] Design Structured Output schema for AI response:
+- [x] Design Structured Output schema for AI response:
   ```json
   {
     "message": "string — the AI's reply to the user",
@@ -329,26 +346,26 @@ Extend the AI endpoint so it accepts the user's message plus conversation histor
     }
   }
   ```
-- [ ] Update `ai.py` to:
+- [x] Update `ai.py` to:
   - Accept: `user_message`, `conversation_history`, `board_state`
   - Build system prompt that includes the board JSON and instructs the AI to use structured output
   - Request structured output using the OpenRouter/OpenAI response format
   - Return parsed `AIResponse` object
-- [ ] Add `POST /api/chat` route:
+- [x] Add `POST /api/chat` route:
   - Accepts `{ message: string, history: [...] }`
   - Fetches current board for the authenticated user
   - Calls AI with board context
   - If `board_update` is non-null, applies changes to the database
   - Returns `{ message, board_updated: bool }`
-- [ ] Store conversation history server-side per user session (simple in-memory list is fine for MVP)
+- [x] Store conversation history server-side per user session (simple in-memory list is fine for MVP)
 
 ### Tests
 
-- [ ] Unit tests for `ai.py` with mocked OpenRouter responses:
+- [x] Unit tests for `ai.py` with mocked OpenRouter responses:
   - Parses `board_update: null` correctly (message only)
   - Parses `board_update` with create/update/delete/move correctly
   - Board JSON is included in the messages sent to AI
-- [ ] Integration tests for `POST /api/chat`:
+- [x] Integration tests for `POST /api/chat`:
   - Message with no board action returns `board_updated: false`
   - Message that creates a card: card appears in `GET /api/board`
   - Message that moves a card: card is in new column in `GET /api/board`

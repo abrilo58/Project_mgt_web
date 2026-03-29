@@ -16,20 +16,23 @@ Python FastAPI backend. Serves the statically built Next.js frontend at `/` and 
 
 ```
 backend/
-├── main.py           FastAPI app, lifespan (init DB), auth + chat test routes, static mount
-├── ai.py             OpenRouter client wrapper (`openai` SDK, OpenAI-compatible API)
-├── auth.py           Session cookie auth (in-memory tokens)
+├── main.py           FastAPI app, lifespan (init DB), auth, `/api/chat`, `/api/chat/test`, static mount
+├── ai.py             OpenRouter: `complete_chat`, `ask_what_is_two_plus_two`, `chat_kanban` (board + JSON reply)
+├── ai_types.py       Pydantic: `ChatRequest`, `AIResponse`, `BoardUpdate`, card action payloads
+├── chat_store.py     In-memory chat transcripts keyed by `session_token` (cleared on logout)
+├── auth.py           Session cookie auth; `get_current_user`, `get_session_token`
 ├── database.py       DB path, schema init, `get_db` dependency, seed on login
-├── kanban_api.py     Authenticated board / column / card routes (`APIRouter`)
+├── kanban_api.py     REST board routes; `get_board_data`, `*_data` helpers, `apply_ai_board_update`
 ├── pyproject.toml
 ├── .python-version
 ├── static/           Next.js static export (build output)
 └── tests/
-    ├── conftest.py   Test DB path, schema init, per-test reset + session clear
+    ├── conftest.py   Test DB path, schema init, per-test reset + session + chat clear
     ├── test_health.py
     ├── test_static.py
     ├── test_auth.py
     ├── test_ai.py
+    ├── test_chat_api.py
     └── test_kanban.py
 ```
 
@@ -38,7 +41,7 @@ backend/
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `DB_PATH` | `./data/kanban.db` (resolved from cwd) | SQLite file path |
-| `OPENROUTER_API_KEY` | (none) | Required for `POST /api/chat/test` to call OpenRouter; optional in CI (tests mock or skip) |
+| `OPENROUTER_API_KEY` | (none) | Required for live OpenRouter calls (`/api/chat/test`, `/api/chat`); optional in CI (tests mock or skip) |
 
 Tables are created on startup if missing. On each successful login, `ensure_user_board` creates the user row (if needed), then a board named "Kanban Studio" with five columns if the user has no board yet.
 
@@ -57,6 +60,7 @@ Tables are created on startup if missing. On each successful login, `ensure_user
 | DELETE | `/api/cards/{card_id}` | Remove card | Yes |
 | PUT | `/api/cards/{card_id}/move` | Body `column_id`, `position` (0-based) | Yes |
 | POST | `/api/chat/test` | Sends fixed prompt "what is 2+2?" to OpenRouter; returns `{"reply", "model"}` | Yes |
+| POST | `/api/chat` | Body `message`, optional `history` (else server transcript); returns `message`, `board_updated`; applies structured `board_update` to SQLite | Yes |
 | GET | `/` | Static site | No |
 
 Unauthenticated access to protected routes returns **401**.
@@ -84,5 +88,6 @@ From project root: `docker compose up --build`. Compose sets `DB_PATH=/app/data/
 ## Notes for Future Parts
 
 - **Part 7**: Frontend calls these routes instead of in-memory state (done).
-- **Part 8**: `ai.py` and `POST /api/chat/test` (OpenRouter smoke test) are done.
-- **Part 9+**: Full `POST /api/chat` with board context and structured outputs.
+- **Part 8**: `ai.py` and `POST /api/chat/test` (done).
+- **Part 9**: `POST /api/chat`, `chat_kanban`, `apply_ai_board_update`, `ai_types`, `chat_store` (done).
+- **Part 10**: Chat sidebar UI calling `/api/chat` with `credentials: "include"`.

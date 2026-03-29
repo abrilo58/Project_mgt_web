@@ -3,6 +3,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ai_types import BoardUpdate
 from auth import get_current_user
 from database import get_db
 
@@ -129,11 +130,7 @@ def _apply_move(
     )
 
 
-@router.get("/board")
-def get_board(
-    username: str = Depends(get_current_user),
-    conn: sqlite3.Connection = Depends(get_db),
-):
+def get_board_data(conn: sqlite3.Connection, username: str) -> dict:
     board = _board_row(conn, username)
     columns_out = []
     col_rows = conn.execute(
@@ -176,6 +173,14 @@ def get_board(
     }
 
 
+@router.get("/board")
+def get_board(
+    username: str = Depends(get_current_user),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    return get_board_data(conn, username)
+
+
 class ColumnUpdate(BaseModel):
     title: str = Field(min_length=1)
 
@@ -207,12 +212,7 @@ class CreateCardBody(BaseModel):
     position: int | None = None
 
 
-@router.post("/cards", status_code=201)
-def create_card(
-    body: CreateCardBody,
-    username: str = Depends(get_current_user),
-    conn: sqlite3.Connection = Depends(get_db),
-):
+def create_card_data(conn: sqlite3.Connection, username: str, body: CreateCardBody) -> dict:
     _column_belongs_to_user(conn, username, body.column_id)
     count = conn.execute(
         "SELECT COUNT(*) AS n FROM cards WHERE column_id = ?",
@@ -254,6 +254,15 @@ def create_card(
     }
 
 
+@router.post("/cards", status_code=201)
+def create_card(
+    body: CreateCardBody,
+    username: str = Depends(get_current_user),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    return create_card_data(conn, username, body)
+
+
 class UpdateCardBody(BaseModel):
     title: str | None = None
     details: str | None = None
@@ -261,13 +270,7 @@ class UpdateCardBody(BaseModel):
     position: int | None = None
 
 
-@router.put("/cards/{card_id}")
-def update_card(
-    card_id: int,
-    body: UpdateCardBody,
-    username: str = Depends(get_current_user),
-    conn: sqlite3.Connection = Depends(get_db),
-):
+def update_card_data(conn: sqlite3.Connection, username: str, card_id: int, body: UpdateCardBody) -> dict:
     card = _card_for_user(conn, username, card_id)
     new_title = body.title.strip() if body.title is not None else card["title"]
     new_details = card["details"] if body.details is None else body.details
@@ -305,12 +308,17 @@ def update_card(
     }
 
 
-@router.delete("/cards/{card_id}", status_code=204)
-def delete_card(
+@router.put("/cards/{card_id}")
+def update_card(
     card_id: int,
+    body: UpdateCardBody,
     username: str = Depends(get_current_user),
     conn: sqlite3.Connection = Depends(get_db),
 ):
+    return update_card_data(conn, username, card_id, body)
+
+
+def delete_card_data(conn: sqlite3.Connection, username: str, card_id: int) -> None:
     card = _card_for_user(conn, username, card_id)
     col_id = card["column_id"]
     pos = card["position"]
@@ -322,6 +330,15 @@ def delete_card(
         """,
         (col_id, pos),
     )
+
+
+@router.delete("/cards/{card_id}", status_code=204)
+def delete_card(
+    card_id: int,
+    username: str = Depends(get_current_user),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    delete_card_data(conn, username, card_id)
     return None
 
 
@@ -330,13 +347,7 @@ class MoveCardBody(BaseModel):
     position: int = Field(ge=0)
 
 
-@router.put("/cards/{card_id}/move")
-def move_card(
-    card_id: int,
-    body: MoveCardBody,
-    username: str = Depends(get_current_user),
-    conn: sqlite3.Connection = Depends(get_db),
-):
+def move_card_data(conn: sqlite3.Connection, username: str, card_id: int, body: MoveCardBody) -> dict:
     _apply_move(conn, username, card_id, body.column_id, body.position)
     row = conn.execute(
         "SELECT id, column_id, title, details, position FROM cards WHERE id = ?",
@@ -349,3 +360,51 @@ def move_card(
         "details": row["details"],
         "position": row["position"],
     }
+
+
+@router.put("/cards/{card_id}/move")
+def move_card(
+    card_id: int,
+    body: MoveCardBody,
+    username: str = Depends(get_current_user),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    return move_card_data(conn, username, card_id, body)
+
+
+def apply_ai_board_update(conn: sqlite3.Connection, username: str, bu: BoardUpdate | None) -> bool:
+    if bu is None:
+        return False
+    changed = False
+    for d in bu.cards_to_delete:
+        delete_card_data(conn, username, d.card_id)
+        changed = True
+    for c in bu.cards_to_create:
+        create_card_data(
+            conn,
+            username,
+            CreateCardBody(
+                column_id=c.column_id,
+                title=c.title,
+                details=c.details or "",
+                position=c.position,
+            ),
+        )
+        changed = True
+    for u in bu.cards_to_update:
+        update_card_data(
+            conn,
+            username,
+            u.card_id,
+            UpdateCardBody(
+                title=u.title,
+                details=u.details,
+                column_id=u.column_id,
+                position=u.position,
+            ),
+        )
+        changed = True
+    for m in bu.cards_to_move:
+        move_card_data(conn, username, m.card_id, MoveCardBody(column_id=m.column_id, position=m.position))
+        changed = True
+    return changed
