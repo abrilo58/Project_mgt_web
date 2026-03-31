@@ -1,9 +1,11 @@
 import os
 import sqlite3
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -20,6 +22,25 @@ from auth import (
 )
 from database import ensure_user_board, get_db, init_database
 from kanban_api import apply_ai_board_update, get_board_data, router as kanban_router
+
+
+# Simple rate limiter for login endpoint
+LOGIN_RATE_WINDOW = 60  # seconds
+LOGIN_RATE_MAX = 10  # max attempts per window per IP
+_login_attempts: dict[str, list[float]] = {}
+_login_lock = threading.Lock()
+
+
+def _check_login_rate(client_ip: str) -> None:
+    now = time.time()
+    with _login_lock:
+        attempts = _login_attempts.get(client_ip, [])
+        # Remove attempts outside the window
+        attempts = [t for t in attempts if now - t < LOGIN_RATE_WINDOW]
+        if len(attempts) >= LOGIN_RATE_MAX:
+            raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+        attempts.append(now)
+        _login_attempts[client_ip] = attempts
 
 
 @asynccontextmanager
@@ -44,9 +65,11 @@ def health():
 @app.post("/api/auth/login")
 def login(
     credentials: LoginRequest,
+    request: Request,
     response: Response,
     conn: sqlite3.Connection = Depends(get_db),
 ):
+    _check_login_rate(request.client.host if request.client else "unknown")
     if credentials.username != HARDCODED_USERNAME or credentials.password != HARDCODED_PASSWORD:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     ensure_user_board(conn, credentials.username)
@@ -119,4 +142,5 @@ def chat_route(
 app.include_router(kanban_router, prefix="/api")
 
 static_dir = Path(__file__).parent / "static"
-app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+if static_dir.exists():
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

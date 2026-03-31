@@ -34,6 +34,7 @@ describe("KanbanBoard", () => {
     });
     vi.mocked(deleteCard).mockResolvedValue(undefined);
     vi.mocked(persistCardMove).mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   afterEach(() => {

@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
     const form = new FormData(e.currentTarget);
     try {
       const res = await fetch("/api/auth/login", {
@@ -28,6 +30,8 @@ export default function LoginPage() {
       }
     } catch {
       setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -54,8 +58,9 @@ export default function LoginPage() {
               name="username"
               type="text"
               required
+              disabled={loading}
               autoComplete="username"
-              className="rounded-xl border border-[var(--stroke)] px-4 py-3 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)] focus:ring-1 focus:ring-[var(--primary-blue)]"
+              className="rounded-xl border border-[var(--stroke)] px-4 py-3 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)] focus:ring-1 focus:ring-[var(--primary-blue)] disabled:opacity-60"
             />
           </div>
           <div className="flex flex-col gap-2">
@@ -70,8 +75,9 @@ export default function LoginPage() {
               name="password"
               type="password"
               required
+              disabled={loading}
               autoComplete="current-password"
-              className="rounded-xl border border-[var(--stroke)] px-4 py-3 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)] focus:ring-1 focus:ring-[var(--primary-blue)]"
+              className="rounded-xl border border-[var(--stroke)] px-4 py-3 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)] focus:ring-1 focus:ring-[var(--primary-blue)] disabled:opacity-60"
             />
           </div>
           {error && (
@@ -81,9 +87,10 @@ export default function LoginPage() {
           )}
           <button
             type="submit"
-            className="mt-2 rounded-xl bg-[var(--secondary-purple)] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+            disabled={loading}
+            className="mt-2 rounded-xl bg-[var(--secondary-purple)] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Sign in
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
       </div>

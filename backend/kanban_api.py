@@ -132,7 +132,6 @@ def _apply_move(
 
 def get_board_data(conn: sqlite3.Connection, username: str) -> dict:
     board = _board_row(conn, username)
-    columns_out = []
     col_rows = conn.execute(
         """
         SELECT id, title, position FROM columns
@@ -141,31 +140,39 @@ def get_board_data(conn: sqlite3.Connection, username: str) -> dict:
         """,
         (board["id"],),
     ).fetchall()
-    for col in col_rows:
-        card_rows = conn.execute(
-            """
-            SELECT id, title, details, position FROM cards
-            WHERE column_id = ?
+
+    # Fetch all cards for the board in a single query instead of N+1
+    col_ids = [col["id"] for col in col_rows]
+    cards_by_column: dict[int, list[dict]] = {cid: [] for cid in col_ids}
+    if col_ids:
+        placeholders = ",".join("?" for _ in col_ids)
+        all_cards = conn.execute(
+            f"""
+            SELECT id, column_id, title, details, position FROM cards
+            WHERE column_id IN ({placeholders})
             ORDER BY position, id
             """,
-            (col["id"],),
+            col_ids,
         ).fetchall()
-        columns_out.append(
-            {
-                "id": col["id"],
-                "title": col["title"],
-                "position": col["position"],
-                "cards": [
-                    {
-                        "id": c["id"],
-                        "title": c["title"],
-                        "details": c["details"],
-                        "position": c["position"],
-                    }
-                    for c in card_rows
-                ],
-            }
-        )
+        for c in all_cards:
+            cards_by_column[c["column_id"]].append(
+                {
+                    "id": c["id"],
+                    "title": c["title"],
+                    "details": c["details"],
+                    "position": c["position"],
+                }
+            )
+
+    columns_out = [
+        {
+            "id": col["id"],
+            "title": col["title"],
+            "position": col["position"],
+            "cards": cards_by_column[col["id"]],
+        }
+        for col in col_rows
+    ]
     return {
         "id": board["id"],
         "name": board["name"],
@@ -182,7 +189,7 @@ def get_board(
 
 
 class ColumnUpdate(BaseModel):
-    title: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=255)
 
 
 @router.put("/columns/{column_id}")
@@ -207,8 +214,8 @@ def rename_column(
 
 class CreateCardBody(BaseModel):
     column_id: int
-    title: str = Field(min_length=1)
-    details: str = ""
+    title: str = Field(min_length=1, max_length=255)
+    details: str = Field(default="", max_length=2000)
     position: int | None = None
 
 
@@ -376,6 +383,8 @@ def apply_ai_board_update(conn: sqlite3.Connection, username: str, bu: BoardUpda
     if bu is None:
         return False
     changed = False
+    # Use a savepoint so partial AI updates are rolled back atomically
+    conn.execute("SAVEPOINT ai_update")
     try:
         for d in bu.cards_to_delete:
             delete_card_data(conn, username, d.card_id)
@@ -408,6 +417,9 @@ def apply_ai_board_update(conn: sqlite3.Connection, username: str, bu: BoardUpda
         for m in bu.cards_to_move:
             move_card_data(conn, username, m.card_id, MoveCardBody(column_id=m.column_id, position=m.position))
             changed = True
+        conn.execute("RELEASE SAVEPOINT ai_update")
     except HTTPException as e:
+        conn.execute("ROLLBACK TO SAVEPOINT ai_update")
+        conn.execute("RELEASE SAVEPOINT ai_update")
         raise HTTPException(status_code=502, detail=f"AI board update failed: {e.detail}") from e
     return changed

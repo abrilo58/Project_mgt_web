@@ -80,6 +80,17 @@ describe("AIChatSidebar", () => {
     });
   });
 
+  it("shows error state when sendChat rejects", async () => {
+    vi.mocked(sendChat).mockRejectedValueOnce(new Error("Network failure"));
+    render(<AIChatSidebar />);
+    await userEvent.click(screen.getByTestId("ai-chat-toggle"));
+    await userEvent.type(screen.getByTestId("ai-chat-input"), "Fail");
+    await userEvent.click(screen.getByTestId("ai-chat-send"));
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Network failure");
+    });
+  });
+
   it("passes prior messages as history on the second send", async () => {
     render(<AIChatSidebar />);
     await userEvent.click(screen.getByTestId("ai-chat-toggle"));

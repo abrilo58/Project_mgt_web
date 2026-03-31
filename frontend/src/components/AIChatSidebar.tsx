@@ -78,6 +78,9 @@ export function AIChatSidebar({ onBoardUpdate }: AIChatSidebarProps) {
         <aside
           id="ai-chat-panel"
           data-testid="ai-chat-panel"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(false);
+          }}
           className="fixed bottom-24 right-6 z-40 flex h-[min(560px,calc(100vh-8rem))] w-[min(400px,calc(100vw-3rem))] flex-col rounded-3xl border border-[var(--stroke)] bg-white/95 shadow-[var(--shadow)] backdrop-blur"
         >
           <div className="border-b border-[var(--stroke)] px-5 py-4">
@@ -144,9 +147,17 @@ export function AIChatSidebar({ onBoardUpdate }: AIChatSidebarProps) {
               data-testid="ai-chat-input"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (draft.trim() && !loading) {
+                    handleSubmit(e as unknown as React.FormEvent);
+                  }
+                }
+              }}
               rows={3}
               disabled={loading}
-              placeholder="Message the assistant"
+              placeholder="Message the assistant (Enter to send, Shift+Enter for newline)"
               className="w-full resize-none rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--navy-dark)] outline-none ring-[var(--primary-blue)] focus:ring-2 disabled:opacity-60"
             />
             <button

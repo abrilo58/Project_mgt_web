@@ -43,7 +43,11 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
         </div>
         <button
           type="button"
-          onClick={() => onDelete(card.id)}
+          onClick={() => {
+            if (window.confirm(`Delete "${card.title}"?`)) {
+              onDelete(card.id);
+            }
+          }}
           className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
           aria-label={`Delete ${card.title}`}
         >

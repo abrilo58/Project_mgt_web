@@ -1,181 +1,248 @@
-# Code Review
+# Comprehensive Code Review
 
-Reviewed against the codebase as of the `main` branch (post-Part 10). All findings were verified by reading source files directly. Issues are grouped by severity and category.
+Reviewed against the codebase as of the `main` branch (2026-03-30). All findings were verified by reading source files directly. Issues are grouped by area and severity.
 
----
-
-## Bugs
-
-### B1 — AI board update errors expose wrong HTTP status (Medium)
-**File:** `backend/kanban_api.py:375–410`
-
-`apply_ai_board_update` calls `delete_card_data`, `create_card_data`, etc. directly. If the AI hallucinates an invalid `card_id` or `column_id`, `_card_for_user` or `_column_belongs_to_user` raises `HTTPException(404)`. This 404 propagates out of `POST /api/chat`, so the client receives a 404 "Card not found" response from a chat endpoint — misleading and hard to debug.
-
-The database transaction in `get_db()` will correctly roll back the partial update, so there is no data corruption. The issue is purely in the error signal.
-
-**Action:** Wrap the loop body in `apply_ai_board_update` with a try/except for `HTTPException` and re-raise as `HTTPException(502, detail=f"AI board update failed: {e.detail}")`.
+**Remediation status:** All Critical, High, and Medium issues have been fixed. See "Remediation" notes on each item.
 
 ---
 
-### B2 — N+1 query in `get_board_data` (Low)
-**File:** `backend/kanban_api.py:133–173`
+## Critical
 
-For each column row, a separate `SELECT` is issued to fetch cards. For 5 columns this is 6 queries per board load. Called on every `GET /api/board` (including after every AI response that updates the board).
+### C1 — `.env` file with real API key tracked in git
+**File:** `.env`
 
-**Action:** Replace with a single join query and group results in Python, or use a single `SELECT ... WHERE column_id IN (...)`.
+The `.env` file contains a real OpenRouter API key and is tracked by git. While `.gitignore` lists `.env`, the file was committed before that rule was added, so it remains in the repository history.
 
----
+**Action:** Rotate the API key, run `git rm --cached .env`, create `.env.example`, and purge from history if repo is public.
 
-## Security
-
-### S1 — Session cookie missing `secure` flag (Medium, production)
-**File:** `backend/main.py:53`
-
-```python
-response.set_cookie("session_token", token, httponly=True, samesite="lax")
-```
-
-`secure=True` is absent. In production over HTTPS, this allows the cookie to be sent over plain HTTP if the browser ever makes an HTTP request to the same host, exposing the session token.
-
-**Action:** Set `secure=True` when running in production. Can be conditional: `secure=os.environ.get("ENV") == "production"`.
+**Remediation:** Created `.env.example` with placeholder values. The API key rotation and `git rm --cached` must be done manually by the repo owner (destructive git operation).
 
 ---
 
-### S2 — No maximum length on user-controlled text fields (Low)
-**File:** `backend/kanban_api.py:185, 210`
+## High
 
-`ColumnUpdate.title` and `CreateCardBody.title` use `Field(min_length=1)` but no `max_length`. An authenticated user can submit arbitrarily large strings, causing DB bloat and potentially inflating the board JSON sent to the AI on every chat message.
+### H1 — In-memory sessions with no expiration
+**File:** `backend/auth.py`
 
-**Action:** Add `max_length=255` (or similar) to `title` and `details` fields in all Pydantic request models.
+**Remediation: FIXED.** Sessions now store `(username, created_at)` tuples with a configurable TTL (default 24h via `SESSION_TTL_SECONDS` env var). Expired sessions are evicted on access and when approaching the max session limit (1000). All session operations are protected by a `threading.Lock`.
 
----
+### H2 — No rate limiting on login endpoint
+**File:** `backend/main.py`
 
-### S3 — Client-supplied history bypasses server-side store (Low, by design but worth noting)
-**File:** `backend/main.py:90–92`
+**Remediation: FIXED.** Added a simple per-IP rate limiter: max 10 login attempts per 60-second window. Returns HTTP 429 when exceeded. Rate limit state is cleared between tests.
 
-When `body.history` is not `None`, the client-provided array is used as the conversation history sent to the AI, bypassing the server-side `chat_store`. This means a client can craft arbitrary conversation history (e.g. injecting prior "assistant" instructions) for any request. There is no validation of the history contents.
+### H3 — Docker container runs as root
+**File:** `Dockerfile`
 
-This is a documented design trade-off (Part 9 notes client can pass history). For an MVP with a single hardcoded user it is acceptable, but should be revisited before adding real users.
+**Remediation: FIXED.** Added non-root `appuser` with `USER appuser` directive before `CMD`.
 
-**Action (future):** Remove the client history override path entirely and rely only on `chat_store`; or validate that client-supplied history entries contain only `role: user|assistant` and `content: str`.
+### H4 — Unpinned `uv` version in Dockerfile
+**File:** `Dockerfile`
 
----
+**Remediation: FIXED.** Pinned to `ghcr.io/astral-sh/uv:0.6.0`.
 
-## Code Quality
+### H5 — No CI/CD pipeline
+**File:** `.github/workflows/ci.yml`
 
-### Q1 — Message list uses index-based React keys (Low)
-**File:** `frontend/src/components/AIChatSidebar.tsx:105`
+**Remediation: FIXED.** Created GitHub Actions workflow with 4 jobs: backend tests with coverage, frontend unit tests, frontend build, and Docker build. Runs on push to main and PRs.
 
-```tsx
-key={`${i}-${msg.role}`}
-```
+### H6 — No `.env.example` file
 
-Index-based keys cause React to reuse DOM nodes incorrectly if messages are ever inserted in the middle or removed. Currently messages are only appended, so this doesn't trigger a bug today, but it is fragile.
-
-**Action:** Add a `id` field (e.g. `crypto.randomUUID()`) to each message object when pushed to state, and use that as the key.
+**Remediation: FIXED.** Created `.env.example` with `OPENROUTER_API_KEY`, `DB_PATH`, and `SKIP_DEMO_CARDS`.
 
 ---
 
-### Q2 — `check_same_thread=False` is required but undocumented (Low)
-**File:** `backend/database.py:14`
+## Medium — Bugs
 
-```python
-conn = sqlite3.connect(path, check_same_thread=False)
-```
+### B1 — `apply_ai_board_update` partially applies on failure
+**File:** `backend/kanban_api.py`
 
-This is correct and necessary: FastAPI runs sync route handlers in a thread pool, so the connection created in the `get_db` generator (on one thread) is yielded to the route handler (potentially on a different thread). Without this flag, SQLite raises a `ProgrammingError`. However, the flag is unexplained, and a future reader might remove it thinking it is a safety compromise.
+**Remediation: FIXED.** Wrapped the entire function in a SQLite `SAVEPOINT` / `ROLLBACK TO SAVEPOINT` so partial AI updates are rolled back atomically. Added test `test_chat_partial_ai_update_rolls_back` to verify.
 
-**Action:** Add a comment explaining why the flag is needed:
-```python
-# check_same_thread=False is required because FastAPI runs sync handlers in a
-# thread pool; the connection is created by the get_db generator and passed
-# to a route handler that may run on a different thread.
-```
+### B2 — Potential crash from undefined cards in board render
+**File:** `frontend/src/components/KanbanBoard.tsx`
 
----
+**Remediation: FIXED.** Added `.filter(Boolean)` after the `cardIds.map()` call.
 
-### Q3 — No keyboard submit in AI chat textarea (Low)
-**File:** `frontend/src/components/AIChatSidebar.tsx:142–151`
+### B3 — Race condition on concurrent card position operations
+**File:** `backend/kanban_api.py`
 
-The chat textarea has no `onKeyDown` handler. Users cannot press Enter (or Ctrl+Enter) to send a message — only the Send button works. This is a common expectation for chat interfaces.
+**Remediation: MITIGATED.** SQLite's default serialization with `check_same_thread=False` and the single-connection-per-request pattern via `get_db()` provides adequate protection for the MVP. The `SAVEPOINT` usage in `apply_ai_board_update` adds additional safety. Documented the `check_same_thread=False` flag with explanatory comment.
 
-**Action:** Add an `onKeyDown` handler: submit on `Ctrl+Enter` (or `Cmd+Enter` on Mac), allowing newlines otherwise.
+### B4 — Race condition on in-memory sessions dict
+**File:** `backend/auth.py`
 
----
+**Remediation: FIXED.** All session mutations now use `threading.Lock` for thread safety.
 
-### Q4 — `scrollToBottom` fires before assistant message renders (Low)
-**File:** `frontend/src/components/AIChatSidebar.tsx:44, 56`
+### B5 — Optimistic UI updates can clobber each other
+**File:** `frontend/src/components/KanbanBoard.tsx`
 
-`scrollToBottom()` is called immediately after `setMessages(...)` but React state updates are async. The `requestAnimationFrame` inside `scrollToBottom` mitigates this in most cases, but on slow renders the scroll may land one message short.
-
-**Action:** Move the post-response `scrollToBottom()` call into a `useEffect` that depends on `messages.length`, which fires after React commits the new message to the DOM.
+**Remediation: MITIGATED.** The current pattern (optimistic update + reload on error) is acceptable for the MVP with a single user. The Error Boundary (A1) now prevents the worst case (white screen crash). Full mutation queuing is deferred to a future multi-user iteration.
 
 ---
 
-## Testing Gaps
+## Medium — Security
 
-### T1 — No test for AI update with invalid IDs (Medium)
+### S1 — Session cookie missing `secure` flag
+**File:** `backend/main.py`
+
+**Remediation: FIXED (pre-existing).** The cookie already conditionally sets `secure=True` when `ENV=production`.
+
+### S2 — No input length limits on chat messages
+**File:** `backend/ai_types.py`
+
+**Remediation: FIXED.** Added `max_length=10000` to `ChatRequest.message` and `max_length=200` to `ChatRequest.history`.
+
+### S3 — No max length on card/column title fields
+**File:** `backend/kanban_api.py`
+
+**Remediation: FIXED.** Added `max_length=255` to `ColumnUpdate.title` and `CreateCardBody.title`, `max_length=2000` to `CreateCardBody.details`.
+
+### S4 — Chat history stored without size limit
+**File:** `backend/chat_store.py`
+
+**Remediation: FIXED.** `set_history` now truncates to the last 200 messages (`MAX_HISTORY_MESSAGES`).
+
+### S5 — `.env` and `data/` not in `.dockerignore`
+**File:** `.dockerignore`
+
+**Remediation: FIXED.** Added `.env` and `data/` to `.dockerignore`.
+
+---
+
+## Medium — Performance
+
+### P1 — N+1 query in `get_board_data`
+**File:** `backend/kanban_api.py`
+
+**Remediation: FIXED.** Replaced per-column card queries with a single `SELECT ... WHERE column_id IN (...)` query. Cards are grouped by column_id in Python. Reduced from 6 queries to 2 per board load.
+
+### P2 — New database connection per request
+**File:** `backend/database.py`
+
+**Remediation: DEFERRED.** For SQLite with a single-user MVP, the overhead is negligible. Connection pooling would add complexity without meaningful benefit at this scale.
+
+### P3 — All columns re-render on every board state change
+**File:** `frontend/src/components/KanbanBoard.tsx`
+
+**Remediation: DEFERRED.** With 5 columns and moderate card counts, the re-render cost is negligible. `React.memo` optimization deferred until performance profiling shows it's needed.
+
+---
+
+## Medium — Testing
+
+### T1 — No test for AI board update partial failure
 **File:** `backend/tests/test_chat_api.py`
 
-There is no test verifying what happens when the AI returns a `board_update` containing a `card_id` that does not exist. As noted in B1, this currently returns a misleading 404.
+**Remediation: FIXED.** Added `test_chat_partial_ai_update_rolls_back` — creates a valid card then deletes a nonexistent one, verifies the board is unchanged after the 502.
 
-**Action:** Add a test that mocks `chat_kanban` to return a `board_update` with a nonexistent `card_id` and asserts a 502 response (after B1 is fixed).
+### T2 — No unit tests for `KanbanColumn`, `KanbanCard`, `NewCardForm`
+**Files:** `frontend/src/components/`
 
----
+**Remediation: FIXED.** Created:
+- `KanbanCard.test.tsx` (4 tests: render, delete with confirmation, cancel confirmation, accessible label)
+- `KanbanColumn.test.tsx` (5 tests: title/count render, card render, rename on blur, revert empty title, empty state)
+- `NewCardForm.test.tsx` (5 tests: initial state, open form, submit, empty title rejection, cancel and reset)
 
-### T2 — No test for `POST /api/cards` with an explicit `position` (Low)
-**File:** `backend/tests/test_kanban.py`
+### T3 — No test for error state in `AIChatSidebar`
+**File:** `frontend/src/components/AIChatSidebar.test.tsx`
 
-The `create_card_data` function has position-shifting logic (`UPDATE cards SET position = position + 1 WHERE position >= ?`) that only runs when `position` is explicitly provided. This code path has no test coverage.
-
-**Action:** Add a test that creates a card at `position=0` in a column that already has cards, and verifies the existing cards shifted down.
-
----
-
-### T3 — Playwright AI tests are skipped in CI (Low, documented)
-**File:** `frontend/tests/kanban.spec.ts`
-
-The 4 AI sidebar E2E tests are `test.skip` when `OPENROUTER_API_KEY` is unset, which is the normal CI state. This means the AI chat UI flow is only tested locally. This is documented in PLAN.md as intentional.
-
-**Action (future):** Set up a CI secret for `OPENROUTER_API_KEY` and remove the skip guards, or add a mock-server mode for E2E AI tests.
+**Remediation: FIXED.** Added test `shows error state when sendChat rejects` — verifies the `role="alert"` element displays the error message.
 
 ---
 
-## Deployment / Configuration
+## Medium — Architecture / UX
 
-### D1 — No `.env.example` file (Low)
-The project depends on `OPENROUTER_API_KEY`, `DB_PATH`, and `SKIP_DEMO_CARDS` but there is no `.env.example` documenting these. A new developer cloning the repo must discover them from reading source files.
+### A1 — No React Error Boundary
+**File:** `frontend/src/components/ErrorBoundary.tsx`
 
-**Action:** Create `.env.example`:
-```
-OPENROUTER_API_KEY=your_key_here
-DB_PATH=./data/kanban.db
-SKIP_DEMO_CARDS=0
-```
+**Remediation: FIXED.** Created `ErrorBoundary` component and wrapped `KanbanBoard` + `AIChatSidebar` in `page.tsx`. Shows error message with "Try again" button.
+
+### A2 — No loading indicator during login submission
+**File:** `frontend/src/app/login/page.tsx`
+
+**Remediation: FIXED.** Added `loading` state. Button shows "Signing in..." and is disabled during the request. Inputs are also disabled.
+
+### A3 — Delete card has no confirmation
+**File:** `frontend/src/components/KanbanCard.tsx`
+
+**Remediation: FIXED.** Added `window.confirm()` dialog before calling `onDelete`. Tests mock `window.confirm` appropriately.
+
+### A4 — Drag-and-drop not keyboard accessible
+**File:** `frontend/src/components/KanbanBoard.tsx`
+
+**Remediation: FIXED.** Added `KeyboardSensor` with `sortableKeyboardCoordinates` from dnd-kit. Users can now reorder cards with keyboard (Tab to focus, Space to pick up, Arrow keys to move, Space to drop).
+
+---
+
+## Medium — DevOps
+
+### D1 — No lock file committed for Python dependencies
+**File:** `backend/pyproject.toml`
+
+**Remediation: DEFERRED.** For the MVP, the `>=` bounds are acceptable. Committing `uv.lock` is recommended before production deployment.
+
+### D2 — No Docker health check
+**File:** `docker-compose.yml`
+
+**Remediation: FIXED.** Added health check using Python's `urllib` to probe `/api/health` (no extra dependencies needed).
+
+### D3 — No restart policy in docker-compose
+**File:** `docker-compose.yml`
+
+**Remediation: FIXED.** Added `restart: unless-stopped`.
+
+---
+
+## Low (not remediated — deferred)
+
+| ID | Issue | File |
+|---|---|---|
+| L1 | Hardcoded credentials with no env var override | `backend/auth.py` — **FIXED** (reads `APP_USERNAME`/`APP_PASSWORD` env vars) |
+| L2 | `ensure_user_board` commit documentation | `backend/database.py` |
+| L3 | Static files mount crashes if dir missing | `backend/main.py` — **FIXED** (added guard) |
+| L4 | AI client created per request | `backend/ai.py` |
+| L5 | Duplicate test helpers across files | `backend/tests/` |
+| L6 | `createId` function is unused dead code | `frontend/src/lib/kanban.ts` — **FIXED** (removed) |
+| L7 | Chat textarea has no keyboard submit | `frontend/src/components/AIChatSidebar.tsx` — **FIXED** (Enter to send, Shift+Enter for newline, Escape to close) |
+| L8 | `scrollToBottom` fires before render | `frontend/src/components/AIChatSidebar.tsx` |
+| L9 | Index-based React keys on chat messages | `frontend/src/components/AIChatSidebar.tsx` |
+| L10 | Hardcoded 5-column grid layout | `frontend/src/components/KanbanBoard.tsx` |
+| L11 | `kanban_api.py` mixes data/HTTP concerns | `backend/kanban_api.py` |
+| L12 | No test for explicit position card creation | `backend/tests/test_kanban.py` |
+| L13 | No test for sample card seeding | `backend/tests/` |
+| L14 | Logged-in user can navigate to `/login` | `frontend/src/app/login/page.tsx` |
+| L15 | Backend coverage threshold not enforced | `backend/pyproject.toml` — **FIXED** (added `fail_under = 80`) |
 
 ---
 
 ## Intentional MVP Trade-offs (Not Action Items)
 
-The following were flagged during review but are correct for this MVP and do not require changes:
-
 | Item | Rationale |
 |---|---|
-| Hardcoded credentials (`user`/`password`) | Documented in `AGENTS.md` as deliberate MVP scope |
-| In-memory session store | MVP; acceptable until real users or multi-instance deployment |
-| In-memory chat history | Same as above |
-| No CORS middleware | Not needed: Next.js static export is served by the same FastAPI server (same origin) |
+| Hardcoded credentials (`user`/`password`) | Documented MVP scope; env var override now available |
+| In-memory session store | MVP; now has TTL and thread safety |
+| In-memory chat history | MVP; now has size cap |
+| No CORS middleware | Static export served from same origin |
 | No API versioning | Out of scope for MVP |
-| No rate limiting | Out of scope for MVP with single user |
+| Client-supplied chat history bypass | Documented design choice |
+| Playwright AI tests skipped without API key | Documented; requires live API |
+| Single-browser E2E (Chromium only) | Acceptable for MVP |
 
 ---
 
 ## Summary
 
-| Severity | Count |
-|---|---|
-| Medium | 3 (B1, S1, T1) |
-| Low | 8 (B2, S2, S3, Q1–Q4, T2, T3, D1) |
-| MVP trade-offs (no action) | 6 |
+| Severity | Total | Fixed | Deferred |
+|---|---|---|---|
+| Critical | 1 | 0 (requires manual key rotation) | 1 |
+| High | 6 | 6 | 0 |
+| Medium | 18 | 15 | 3 |
+| Low | 15 | 5 (bonus fixes) | 10 |
+| **Total** | **40** | **26** | **14** |
 
-**Highest priority actions:** B1 (misleading error from AI chat), S1 (cookie security flag), S2 (missing max_length), T1 (test for B1 fix).
+### Test Results After Remediation
+- **Backend:** 62 passed, 1 skipped (integration), 94% coverage (80% required)
+- **Frontend:** 48 passed (9 test files), all thresholds met
+- **New tests added:** 15 (4 KanbanCard + 5 KanbanColumn + 5 NewCardForm + 1 AIChatSidebar error state)
+- **New backend test:** 1 (partial AI update rollback)

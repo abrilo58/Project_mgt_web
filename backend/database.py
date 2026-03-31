@@ -11,6 +11,9 @@ def get_db_path() -> str:
 def connect() -> sqlite3.Connection:
     path = get_db_path()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
+    # check_same_thread=False is required because FastAPI runs sync handlers in a
+    # thread pool; the connection is created by the get_db generator and passed
+    # to a route handler that may run on a different thread.
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

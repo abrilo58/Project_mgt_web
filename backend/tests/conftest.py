@@ -22,10 +22,14 @@ def _init_db_once():
 def reset_db_and_sessions():
     import auth
     import chat_store
+    import main
     from database import connect, reset_for_testing
 
     chat_store.clear_all()
-    auth.sessions.clear()
+    with auth._lock:
+        auth.sessions.clear()
+    with main._login_lock:
+        main._login_attempts.clear()
     conn = connect()
     reset_for_testing(conn)
     conn.close()

@@ -1,3 +1,5 @@
+MAX_HISTORY_MESSAGES = 200
+
 # session_token -> list of {"role": "user"|"assistant", "content": str}
 CHAT_HISTORY: dict[str, list[dict[str, str]]] = {}
 
@@ -11,7 +13,7 @@ def get_history(session_token: str) -> list[dict[str, str]]:
 
 
 def set_history(session_token: str, messages: list[dict[str, str]]) -> None:
-    CHAT_HISTORY[session_token] = messages
+    CHAT_HISTORY[session_token] = messages[-MAX_HISTORY_MESSAGES:]
 
 
 def clear_all() -> None:

@@ -9,7 +9,7 @@ RUN npm run build
 # Stage 2: Python backend
 FROM python:3.12-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.0 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
@@ -22,6 +22,10 @@ COPY backend/ .
 
 # Replace placeholder static dir with the built frontend
 COPY --from=frontend-build /frontend/out ./static
+
+# Run as non-root user
+RUN useradd -r -s /bin/false appuser && chown -R appuser /app
+USER appuser
 
 EXPOSE 8000
 

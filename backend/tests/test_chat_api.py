@@ -205,3 +205,26 @@ def test_chat_502_when_ai_uses_invalid_column_id():
         res = client.post("/api/chat", json={"message": "add a card to column 99999"})
     assert res.status_code == 502
     assert "AI board update failed" in res.json()["detail"]
+
+
+def test_chat_partial_ai_update_rolls_back():
+    """When a multi-op AI update fails partway, the board should be unchanged (atomic rollback)."""
+    client = make_client()
+    login(client)
+    board = client.get("/api/board").json()
+    bid = backlog_column_id(board)
+    # First op: create a valid card. Second op: delete nonexistent card (will fail).
+    bu = BoardUpdate(
+        cards_to_create=[CardToCreate(column_id=bid, title="Should not persist", details="")],
+        cards_to_delete=[CardToDelete(card_id=99999)],
+    )
+    with patch(
+        "main.ai_module.chat_kanban",
+        return_value=AIResponse(message="Oops.", board_update=bu),
+    ):
+        res = client.post("/api/chat", json={"message": "do both"})
+    assert res.status_code == 502
+    # Board should be unchanged — the created card should have been rolled back
+    board_after = client.get("/api/board").json()
+    backlog = next(c for c in board_after["columns"] if c["id"] == bid)
+    assert not any(c["title"] == "Should not persist" for c in backlog["cards"])

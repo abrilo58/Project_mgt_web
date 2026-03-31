@@ -9,8 +9,8 @@ class ChatHistoryMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1)
-    history: list[ChatHistoryMessage] | None = None
+    message: str = Field(min_length=1, max_length=10000)
+    history: list[ChatHistoryMessage] | None = Field(default=None, max_length=200)
 
 
 class CardToCreate(BaseModel):

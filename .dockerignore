@@ -6,3 +6,5 @@ frontend/out
 **/*.pyc
 backend/.venv
 backend/tests
+.env
+data/

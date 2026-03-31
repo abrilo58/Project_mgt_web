@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { KanbanBoard } from "@/components/KanbanBoard";
 
 export default function Home() {
@@ -34,7 +35,7 @@ export default function Home() {
 
   if (!ready) return null;
   return (
-    <>
+    <ErrorBoundary>
       <KanbanBoard
         boardRefreshNonce={boardRefreshNonce}
         onLogout={handleLogout}
@@ -42,6 +43,6 @@ export default function Home() {
       <AIChatSidebar
         onBoardUpdate={() => setBoardRefreshNonce(Date.now())}
       />
-    </>
+    </ErrorBoundary>
   );
 }
