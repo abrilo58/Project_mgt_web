@@ -7,14 +7,14 @@ describe("NewCardForm", () => {
   it("shows 'Add a card' button by default", () => {
     render(<NewCardForm onAdd={vi.fn()} />);
     expect(
-      screen.getByRole("button", { name: /add a card/i })
+      screen.getByRole("button", { name: /add card/i })
     ).toBeInTheDocument();
   });
 
   it("opens form when 'Add a card' is clicked", async () => {
     render(<NewCardForm onAdd={vi.fn()} />);
     await userEvent.click(
-      screen.getByRole("button", { name: /add a card/i })
+      screen.getByRole("button", { name: /add card/i })
     );
     expect(screen.getByPlaceholderText(/card title/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/details/i)).toBeInTheDocument();
@@ -24,7 +24,7 @@ describe("NewCardForm", () => {
     const onAdd = vi.fn();
     render(<NewCardForm onAdd={onAdd} />);
     await userEvent.click(
-      screen.getByRole("button", { name: /add a card/i })
+      screen.getByRole("button", { name: /add card/i })
     );
     await userEvent.type(
       screen.getByPlaceholderText(/card title/i),
@@ -41,7 +41,7 @@ describe("NewCardForm", () => {
     const onAdd = vi.fn();
     render(<NewCardForm onAdd={onAdd} />);
     await userEvent.click(
-      screen.getByRole("button", { name: /add a card/i })
+      screen.getByRole("button", { name: /add card/i })
     );
     await userEvent.click(
       screen.getByRole("button", { name: /^add card$/i })
@@ -52,7 +52,7 @@ describe("NewCardForm", () => {
   it("closes form and resets fields on cancel", async () => {
     render(<NewCardForm onAdd={vi.fn()} />);
     await userEvent.click(
-      screen.getByRole("button", { name: /add a card/i })
+      screen.getByRole("button", { name: /add card/i })
     );
     await userEvent.type(
       screen.getByPlaceholderText(/card title/i),
@@ -63,7 +63,7 @@ describe("NewCardForm", () => {
     );
     // Should go back to the "Add a card" button
     expect(
-      screen.getByRole("button", { name: /add a card/i })
+      screen.getByRole("button", { name: /add card/i })
     ).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/card title/i)).not.toBeInTheDocument();
   });

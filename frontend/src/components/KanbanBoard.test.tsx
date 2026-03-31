@@ -102,7 +102,7 @@ describe("KanbanBoard", () => {
     await waitFor(() => screen.getAllByTestId(/column-/i));
     const column = getFirstColumn();
     await userEvent.click(
-      within(column).getByRole("button", { name: /add a card/i })
+      within(column).getByRole("button", { name: /add card/i })
     );
 
     const titleInput = within(column).getByPlaceholderText(/card title/i);

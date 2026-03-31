@@ -9,7 +9,8 @@
       "Bash(curl -s http://localhost:8000/)",
       "Bash(npx playwright:*)",
       "Bash(curl -s -L http://localhost:8000/login/)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(curl:*)"
     ]
   }
 }

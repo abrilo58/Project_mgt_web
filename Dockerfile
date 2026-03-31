@@ -23,10 +23,12 @@ COPY backend/ .
 # Replace placeholder static dir with the built frontend
 COPY --from=frontend-build /frontend/out ./static
 
-# Run as non-root user
-RUN useradd -r -s /bin/false appuser && chown -R appuser /app
-USER appuser
+# Create non-root user and pre-create data dir
+RUN useradd -r -m -s /bin/sh appuser && chown -R appuser /app \
+    && mkdir -p /app/data && chown appuser:appuser /app/data \
+    && chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start as root so entrypoint can fix volume permissions, then drop to appuser
+ENTRYPOINT ["/app/entrypoint.sh"]
